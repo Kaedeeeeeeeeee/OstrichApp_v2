@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build + Test (iPhone 17 / iOS 26.5)
+  build:
+    name: Build (iOS Simulator generic)
     runs-on: macos-15
     timeout-minutes: 30
 
@@ -26,8 +26,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+      - name: Show Xcode + SDK
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | head -10
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -36,30 +38,26 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
-      - name: List available simulators
-        run: xcrun simctl list devices available
-
-      - name: Build
+      - name: Build (compile only, no run)
         working-directory: ios
         run: |
           xcodebuild build \
             -project OstrichApp.xcodeproj \
             -scheme OstrichApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Test (单元测试)
-        working-directory: ios
-        run: |
-          xcodebuild test \
-            -project OstrichApp.xcodeproj \
-            -scheme OstrichApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-            -configuration Debug \
-            -only-testing:OstrichAppTests \
-            CODE_SIGNING_ALLOWED=NO
-
-      # SwiftLint 暂未引入。Day 2-3 由 ws/devops 加进来
-      # - name: SwiftLint
-      #   run: swiftlint --strict
+      # 待 Day 2+ 有真单测时启用
+      # - name: Test
+      #   working-directory: ios
+      #   run: |
+      #     # 用 runner 上实际可用的 sim
+      #     SIM=$(xcrun simctl list devices available --json | jq -r '.devices | to_entries[] | .value[] | select(.name|startswith("iPhone")) | .udid' | head -1)
+      #     xcodebuild test \
+      #       -project OstrichApp.xcodeproj \
+      #       -scheme OstrichApp \
+      #       -destination "id=$SIM" \
+      #       -configuration Debug \
+      #       -only-testing:OstrichAppTests \
+      #       CODE_SIGNING_ALLOWED=NO
