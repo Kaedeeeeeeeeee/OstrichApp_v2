@@ -7,12 +7,18 @@ on:
       - 'shared/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.eslintrc.cjs'
+      - '.prettierrc'
+      - '.prettierignore'
       - '.github/workflows/ci-convex.yml'
   push:
     branches: [main]
     paths:
       - 'convex/**'
       - 'shared/**'
+      - '.eslintrc.cjs'
+      - '.prettierrc'
+      - '.prettierignore'
 
 concurrency:
   group: ci-convex-${{ github.ref }}
@@ -41,6 +47,12 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      - name: ESLint
+        run: pnpm exec eslint convex --ext .ts
+
+      - name: Prettier check
+        run: pnpm exec prettier --check 'convex/**/*.ts'
+
       # convex codegen 需要 deployment URL，CI 没有，跳过。
       # tsc 走全量类型检查
       - name: TypeScript typecheck
@@ -52,6 +64,3 @@ jobs:
         run: pnpm vitest run
         # Day 1 还没装 vitest，先跳过；ws/convex 起步后开启
         if: false
-
-      - name: Placeholder (Day 1)
-        run: echo "Convex CI skeleton ready; tsc/vitest activated in Day 2+"
