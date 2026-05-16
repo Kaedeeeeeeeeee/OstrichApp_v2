@@ -3,13 +3,16 @@
 *.swp
 
 # iOS / Xcode
+# .xcodeproj 由 xcodegen 从 project.yml 生成，不进版本控制 (避免多 PR 改 project.yml 时 .pbxproj 冲突)
+# 任何人 clone 后第一步: cd ios && xcodegen generate
+ios/**/*.xcodeproj/
+ios/**/*.xcworkspace/
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/
 ios/**/build/
 ios/**/Pods/
 ios/**/.build/
-ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
 
 # Convex
 convex/_generated/

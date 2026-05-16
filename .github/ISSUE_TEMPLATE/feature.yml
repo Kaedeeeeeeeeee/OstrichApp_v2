@@ -1,0 +1,74 @@
+name: 🟢 功能 / 任务
+description: Phase 1 实施任务，用于派发给 sub-agent
+title: "[<WS>] "
+labels:
+  - type/feature
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 这个任务要交付什么？1-2 句话。
+      placeholder: |
+        示例：把 v4 HTML 的 PATHS.HEAD SVG path 移植到 Swift 字面量常量，确保 parsePath 后顶点数与 JS 端一致。
+    validations:
+      required: true
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: 完成定义 (DoD)
+      description: 必须勾上所有项才算完成
+      value: |
+        - [ ] 代码合入
+        - [ ] 单元测试覆盖核心逻辑
+        - [ ] 手动验证截图（如适用）
+        - [ ] CI 全绿
+    validations:
+      required: true
+
+  - type: textarea
+    id: deps
+    attributes:
+      label: 依赖
+      description: 这个 issue 依赖哪些已完成的 issue？或哪些契约（INTERFACES.md 哪节）？
+      placeholder: |
+        - #N 必须先合
+        - INTERFACES.md §X 已冻结
+
+  - type: textarea
+    id: anti
+    attributes:
+      label: 反对模式（不要做什么）
+      description: 防止过度设计或越界
+      placeholder: |
+        示例：
+        - 不要顺手改 Tokens（属于其他 issue）
+        - 不要引入 Lottie / Rive 依赖
+        - 不要写动态效果（只移植 path）
+
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - ws/convex
+        - ws/ios-design
+        - ws/ios-feature
+        - ws/networking
+        - ws/eggs
+        - ws/maps
+        - ws/devops
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      options:
+        - p0-blocker
+        - p1-must
+        - p2-nice
+    validations:
+      required: true

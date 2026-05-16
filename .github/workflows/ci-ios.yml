@@ -1,0 +1,63 @@
+name: CI · iOS
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'shared/**'
+      - '.github/workflows/ci-ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'shared/**'
+
+concurrency:
+  group: ci-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (iOS Simulator generic)
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode + SDK
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | head -10
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate xcodeproj
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build (compile only, no run)
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project OstrichApp.xcodeproj \
+            -scheme OstrichApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      # 待 Day 2+ 有真单测时启用
+      # - name: Test
+      #   working-directory: ios
+      #   run: |
+      #     # 用 runner 上实际可用的 sim
+      #     SIM=$(xcrun simctl list devices available --json | jq -r '.devices | to_entries[] | .value[] | select(.name|startswith("iPhone")) | .udid' | head -1)
+      #     xcodebuild test \
+      #       -project OstrichApp.xcodeproj \
+      #       -scheme OstrichApp \
+      #       -destination "id=$SIM" \
+      #       -configuration Debug \
+      #       -only-testing:OstrichAppTests \
+      #       CODE_SIGNING_ALLOWED=NO
