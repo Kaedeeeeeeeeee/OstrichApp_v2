@@ -32,7 +32,7 @@ struct LiquidOstrichHeadTests {
             (293 * 0.030, 360 * 0.030, 0.0, -0.150577545800324),
             (293 * 0.030, 360 * 0.030, 1.0, 0.451797602380983),
             (293 * 0.030, 360 * 0.030, 10.0, 0.029133923307859),
-            (318.47 * 0.030, 240.62 * 0.030, 5.5, 0.610026789120110),
+            (318.47 * 0.030, 240.62 * 0.030, 5.5, 0.610026789120110)
         ]
         for f in fixtures {
             let got = s.noise3D(f.x, f.y, f.z)
@@ -55,7 +55,7 @@ struct LiquidOstrichHeadTests {
             (293 * 0.030, 360 * 0.030, 0.0, 0.427570081997428),
             (293 * 0.030, 360 * 0.030, 1.0, 0.452240552777956),
             (293 * 0.030, 360 * 0.030, 10.0, 0.471536282540530),
-            (318.47 * 0.030, 240.62 * 0.030, 5.5, 0.744869496647072),
+            (318.47 * 0.030, 240.62 * 0.030, 5.5, 0.744869496647072)
         ]
         for f in fixtures {
             let got = s.noise3D(f.x, f.y, f.z)
@@ -76,7 +76,7 @@ struct LiquidOstrichHeadTests {
             (100.1, -50.2, -0.621847429458101),
             (-7.7, 7.7, 0.581294340901520),
             (293 * 0.030, 360 * 0.030, 0.064984395751269),
-            (318.47 * 0.030, 240.62 * 0.030, 0.044384805082565),
+            (318.47 * 0.030, 240.62 * 0.030, 0.044384805082565)
         ]
         for f in fixtures {
             let got = s.noise2D(f.x, f.y)
@@ -157,7 +157,7 @@ struct LiquidOstrichHeadTests {
             ("BEAK_DOT", OstrichPaths.BEAK_DOT),
             ("DRIP", OstrichPaths.DRIP),
             ("SPARKLE_R", OstrichPaths.SPARKLE_R),
-            ("SPARKLE_L", OstrichPaths.SPARKLE_L),
+            ("SPARKLE_L", OstrichPaths.SPARKLE_L)
         ]
         #expect(allPaths.count == 16)
         for (name, d) in allPaths {

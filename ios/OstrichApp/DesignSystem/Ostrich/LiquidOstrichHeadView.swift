@@ -31,7 +31,6 @@ public struct LiquidOstrichHeadView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var isDragging: Bool = false
 
-
     // MARK: - Precomputed paths
 
     private static let headParsed = PathParser.parse(OstrichPaths.HEAD)

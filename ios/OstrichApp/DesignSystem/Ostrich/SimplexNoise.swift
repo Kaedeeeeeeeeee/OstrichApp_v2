@@ -300,7 +300,7 @@ struct Mash {
             h *= nD
             nD = Self.toUInt32D(h)
             h -= nD
-            nD = nD + h * 4_294_967_296.0  // 2^32
+            nD += h * 4_294_967_296.0  // 2^32
             n = Self.toUInt32(nD)
         }
         self.n = n
