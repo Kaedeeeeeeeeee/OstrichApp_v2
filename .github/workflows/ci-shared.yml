@@ -1,0 +1,46 @@
+name: CI · Shared
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-shared-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate shared assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check 16 蛋 prompt 文件
+        run: |
+          expected_eggs=(
+            "01_steadfast" "02_poet" "03_straightshooter" "04_cuddler"
+            "05_worldly" "06_maverick" "07_stoic" "08_watcher"
+            "09_hedonist" "10_innocent" "11_protector" "12_elder"
+            "13_mystic" "14_rationalist" "15_nightowl" "16_sunshine"
+          )
+          missing=0
+          for egg in "${expected_eggs[@]}"; do
+            if [ ! -f "shared/eggs/${egg}.md" ]; then
+              echo "::warning::缺失 shared/eggs/${egg}.md (ws/eggs 起步前正常)"
+              missing=$((missing+1))
+            fi
+          done
+          echo "缺失 $missing/16 个蛋文件 (Day 1-7 期间允许)"
+
+      - name: Markdown lint (容忍)
+        uses: DavidAnson/markdownlint-cli2-action@v17
+        continue-on-error: true
+        with:
+          globs: |
+            docs/**/*.md
+            shared/**/*.md
+            README.md

@@ -1,0 +1,54 @@
+name: 🐛 Bug
+description: 报告功能异常或回归
+title: "[BUG] "
+labels:
+  - type/bug
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 实际看到了什么？最好附截图 / 视频
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+      description: 应该是什么样？
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      placeholder: |
+        iOS 版本：
+        设备：
+        Xcode 版本：
+        Convex deployment：
+        Commit SHA：
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重程度
+      options:
+        - p0-blocker
+        - p1-must
+        - p2-nice
+    validations:
+      required: true

@@ -1,0 +1,58 @@
+name: CI · Convex
+
+on:
+  pull_request:
+    paths:
+      - 'convex/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci-convex.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'convex/**'
+      - 'shared/**'
+
+concurrency:
+  group: ci-convex-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-test:
+    name: Typecheck + Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      # convex codegen 需要 deployment URL，CI 没有，跳过。
+      # tsc 走全量类型检查
+      - name: TypeScript typecheck
+        run: pnpm exec tsc --noEmit
+        # Day 1 还没 tsconfig.json，先跳过；Day 2 加上后取消注释
+        if: false
+
+      - name: vitest
+        run: pnpm vitest run
+        # Day 1 还没装 vitest，先跳过；ws/convex 起步后开启
+        if: false
+
+      - name: Placeholder (Day 1)
+        run: echo "Convex CI skeleton ready; tsc/vitest activated in Day 2+"
