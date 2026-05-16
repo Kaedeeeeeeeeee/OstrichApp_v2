@@ -98,14 +98,8 @@ export const awakenOstrich = mutationGeneric({
     appleId: v.optional(v.string()),
   },
   handler: async (ctx: MutationCtx, args) => {
-    if (
-      !Number.isInteger(args.eggType) ||
-      args.eggType < 1 ||
-      args.eggType > 16
-    ) {
-      throw new Error(
-        `Invalid eggType ${args.eggType}, expected integer in 1..16`,
-      );
+    if (!Number.isInteger(args.eggType) || args.eggType < 1 || args.eggType > 16) {
+      throw new Error(`Invalid eggType ${args.eggType}, expected integer in 1..16`);
     }
     const egg = getEggPrompt(args.eggType); // 顺便确保蛋存在
     const now = Date.now();

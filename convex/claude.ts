@@ -33,7 +33,7 @@ export const ostrichTools = [
     input_schema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "用户提到的称呼，如 \"妈妈\"" },
+        name: { type: "string", description: '用户提到的称呼，如 "妈妈"' },
         hint: { type: "string", description: "关于此人的一句话上下文" },
         suggestedCategory: {
           type: "string",
@@ -59,8 +59,7 @@ export const ostrichTools = [
   },
   {
     name: "remember",
-    description:
-      "记住一个重要事实。importance 0-1，visibility 决定「如果我不在了」擦除范围",
+    description: "记住一个重要事实。importance 0-1，visibility 决定「如果我不在了」擦除范围",
     input_schema: {
       type: "object",
       properties: {
@@ -74,8 +73,7 @@ export const ostrichTools = [
   },
   {
     name: "suggest_reach_out",
-    description:
-      "建议用户主动联系关系图谱里的某人。仅在用户表达类似动机时调用，不主动推销",
+    description: "建议用户主动联系关系图谱里的某人。仅在用户表达类似动机时调用，不主动推销",
     input_schema: {
       type: "object",
       properties: {
@@ -100,8 +98,7 @@ export const ostrichTools = [
   },
   {
     name: "request_to_stay_wandering",
-    description:
-      "仅在用户召回鸵鸟且鸵鸟当前活动有趣时调用，让鸵鸟撒娇请求继续遛弯",
+    description: "仅在用户召回鸵鸟且鸵鸟当前活动有趣时调用，让鸵鸟撒娇请求继续遛弯",
     input_schema: {
       type: "object",
       properties: {
@@ -165,10 +162,10 @@ export const chat = internalActionGeneric({
   handler: async (ctx: ActionCtx, args): Promise<ChatResult> => {
     // 1. 拉鸵鸟 + owner 用户。Action 不能直接读 db，只能通过 runQuery。
     //    在没有 _generated 的情况下，我们用 makeFunctionReference 引用一个内部 query。
-    const profile = await ctx.runQuery(
+    const profile = (await ctx.runQuery(
       makeFunctionReference<"query">("chat:_loadChatContext") as never,
       { ostrichId: args.ostrichId } as never,
-    ) as {
+    )) as {
       ostrich: {
         eggType: number;
         name: string;
@@ -183,9 +180,7 @@ export const chat = internalActionGeneric({
 
     const daysTogether = Math.max(
       0,
-      Math.floor(
-        (Date.now() - profile.ostrich.awakenedAt) / (24 * 60 * 60 * 1000),
-      ),
+      Math.floor((Date.now() - profile.ostrich.awakenedAt) / (24 * 60 * 60 * 1000)),
     );
 
     // 2. 五层 system prompt

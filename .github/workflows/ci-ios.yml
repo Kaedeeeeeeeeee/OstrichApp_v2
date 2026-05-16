@@ -5,12 +5,14 @@ on:
     paths:
       - 'ios/**'
       - 'shared/**'
+      - '.swiftlint.yml'
       - '.github/workflows/ci-ios.yml'
   push:
     branches: [main]
     paths:
       - 'ios/**'
       - 'shared/**'
+      - '.swiftlint.yml'
 
 concurrency:
   group: ci-ios-${{ github.ref }}
@@ -33,6 +35,12 @@ jobs:
 
       - name: Install XcodeGen
         run: brew install xcodegen
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: SwiftLint
+        run: swiftlint --strict
 
       - name: Generate xcodeproj
         working-directory: ios

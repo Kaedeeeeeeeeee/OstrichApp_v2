@@ -1,0 +1,38 @@
+# SwiftLint 保守配置 —— 避免风格漂移即可，不卡严格规范。
+# 触发位置：CI（--strict）+ 本地手动 swiftlint。
+
+disabled_rules:
+  - line_length              # 中文注释 / SwiftUI 链式调用容易超长，关掉
+  - trailing_whitespace      # 编辑器差异常引入，关掉
+  - todo                     # 允许 TODO/FIXME
+  - identifier_name          # 允许短变量名 (lat/lng/x/y 等)
+  - type_name                # 允许 OstrichApp 等大写前缀类型
+  - nesting                  # SwiftUI 嵌套层级常会深
+  - multiple_closures_with_trailing_closure
+  - opening_brace            # 与 SwiftUI .modifier(...) { 不冲突
+  - large_tuple
+  - function_body_length
+  - type_body_length
+  - file_length
+  - cyclomatic_complexity
+
+opt_in_rules:
+  - force_unwrapping
+  - implicit_optional_initialization
+  - empty_count
+  - empty_string
+  - closure_spacing
+  - first_where
+
+excluded:
+  - ios/OstrichApp.xcodeproj
+  - "**/_generated"
+  - "**/.build"
+  - "**/Pods"
+  - node_modules
+
+# 仅在 ios/ 下生效
+included:
+  - ios
+
+reporter: "xcode"

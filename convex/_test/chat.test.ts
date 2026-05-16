@@ -38,7 +38,13 @@ type DocOf<T extends string> = T extends "ostriches"
       eggType: number;
       name: string;
       state: string;
-      personality: { eggId: number; archetype: string; traits: string[]; speakingStyle: string; skill: string };
+      personality: {
+        eggId: number;
+        archetype: string;
+        traits: string[];
+        speakingStyle: string;
+        skill: string;
+      };
       currentLocation: { lat: number; lng: number; friendlyName: string };
     }
   : T extends "users"
@@ -89,10 +95,9 @@ type DocOf<T extends string> = T extends "ostriches"
               }
             : never;
 
-async function getAs<T extends "ostriches" | "users" | "chat_rooms" | "messages" | "pending_persons" | "memories">(
-  ctx: { db: { get: (id: Id<T>) => Promise<unknown> } },
-  id: Id<T>,
-): Promise<DocOf<T> | null> {
+async function getAs<
+  T extends "ostriches" | "users" | "chat_rooms" | "messages" | "pending_persons" | "memories",
+>(ctx: { db: { get: (id: Id<T>) => Promise<unknown> } }, id: Id<T>): Promise<DocOf<T> | null> {
   return (await ctx.db.get(id)) as DocOf<T> | null;
 }
 
@@ -132,16 +137,13 @@ afterEach(() => {
 describe("awakenOstrich", () => {
   it("创建 user / ostrich / 主传心室 / 第一条 hardcoded 鸵鸟消息", async () => {
     const t = makeT();
-    const result = (await t.mutation(
-      makeFunctionReference<"mutation">("ostriches:awakenOstrich"),
-      {
-        eggType: 1,
-        name: "柱子",
-        userMbti: "INFP",
-        userZodiac: "巨蟹座",
-        userName: "诗枫",
-      },
-    )) as AwakenResult;
+    const result = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+      userName: "诗枫",
+    })) as AwakenResult;
 
     expect(result.ostrichId).toBeTruthy();
     expect(result.mainRoomId).toBeTruthy();
@@ -175,15 +177,12 @@ describe("awakenOstrich", () => {
   it("拒绝非法 eggType", async () => {
     const t = makeT();
     await expect(
-      t.mutation(
-        makeFunctionReference<"mutation">("ostriches:awakenOstrich"),
-        {
-          eggType: 17,
-          name: "柱子",
-          userMbti: "INFP",
-          userZodiac: "巨蟹座",
-        },
-      ),
+      t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+        eggType: 17,
+        name: "柱子",
+        userMbti: "INFP",
+        userZodiac: "巨蟹座",
+      }),
     ).rejects.toThrow(/Invalid eggType/);
   });
 });
@@ -207,24 +206,18 @@ describe("sendMessage", () => {
     });
 
     const t = makeT();
-    const awaken = (await t.mutation(
-      makeFunctionReference<"mutation">("ostriches:awakenOstrich"),
-      {
-        eggType: 1,
-        name: "柱子",
-        userMbti: "INFP",
-        userZodiac: "巨蟹座",
-        userName: "诗枫",
-      },
-    )) as AwakenResult;
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+      userName: "诗枫",
+    })) as AwakenResult;
 
-    const result = (await t.action(
-      makeFunctionReference<"action">("chat:sendMessage"),
-      {
-        roomId: awaken.mainRoomId,
-        content: "因为我喜欢柱子的稳。",
-      },
-    )) as SendResult;
+    const result = (await t.action(makeFunctionReference<"action">("chat:sendMessage"), {
+      roomId: awaken.mainRoomId,
+      content: "因为我喜欢柱子的稳。",
+    })) as SendResult;
 
     expect(result.messageId).toBeTruthy();
     expect(result.ostrichReply.content).toBe("嗯。我记得你说过这个名字。");
@@ -282,24 +275,18 @@ describe("sendMessage", () => {
     });
 
     const t = makeT();
-    const awaken = (await t.mutation(
-      makeFunctionReference<"mutation">("ostriches:awakenOstrich"),
-      {
-        eggType: 1,
-        name: "柱子",
-        userMbti: "INFP",
-        userZodiac: "巨蟹座",
-        userName: "诗枫",
-      },
-    )) as AwakenResult;
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+      userName: "诗枫",
+    })) as AwakenResult;
 
-    const result = (await t.action(
-      makeFunctionReference<"action">("chat:sendMessage"),
-      {
-        roomId: awaken.mainRoomId,
-        content: "我妈又开始了……",
-      },
-    )) as SendResult;
+    const result = (await t.action(makeFunctionReference<"action">("chat:sendMessage"), {
+      roomId: awaken.mainRoomId,
+      content: "我妈又开始了……",
+    })) as SendResult;
 
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0].toolName).toBe("note_person");
@@ -321,12 +308,8 @@ describe("sendMessage", () => {
         .withIndex("by_room_time", (q) => q.eq("roomId", awaken.mainRoomId))
         .collect();
       const ostrichMessage = messages[messages.length - 1];
-      expect(ostrichMessage.metadata.toolCalls?.[0].toolName).toBe(
-        "note_person",
-      );
-      expect(ostrichMessage.metadata.toolCalls?.[0].pendingPersonId).toBe(
-        pending[0]._id,
-      );
+      expect(ostrichMessage.metadata.toolCalls?.[0].toolName).toBe("note_person");
+      expect(ostrichMessage.metadata.toolCalls?.[0].pendingPersonId).toBe(pending[0]._id);
     });
   });
 
@@ -352,20 +335,17 @@ describe("sendMessage", () => {
     });
 
     const t = makeT();
-    const awaken = (await t.mutation(
-      makeFunctionReference<"mutation">("ostriches:awakenOstrich"),
-      {
-        eggType: 1,
-        name: "柱子",
-        userMbti: "INFP",
-        userZodiac: "巨蟹座",
-      },
-    )) as AwakenResult;
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+    })) as AwakenResult;
 
-    await t.action(
-      makeFunctionReference<"action">("chat:sendMessage"),
-      { roomId: awaken.mainRoomId, content: "我只喝黑咖啡。" },
-    );
+    await t.action(makeFunctionReference<"action">("chat:sendMessage"), {
+      roomId: awaken.mainRoomId,
+      content: "我只喝黑咖啡。",
+    });
 
     await t.run(async (ctx) => {
       const memories = await ctx.db

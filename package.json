@@ -6,7 +6,10 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint convex --ext .ts",
+    "format": "prettier --write 'convex/**/*.ts' '*.json' '*.md'",
+    "format:check": "prettier --check 'convex/**/*.ts'"
   },
   "keywords": [],
   "author": "",
@@ -19,8 +22,13 @@
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
     "convex-test": "^0.0.30",
-    "typescript": "^5.4.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
     "vitest": "^2.0.0"
   }
 }

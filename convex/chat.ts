@@ -85,9 +85,7 @@ export const _loadRoomForSend = internalQueryGeneric({
       .order("desc")
       .take(HISTORY_LIMIT);
     const history = recent.reverse().map((m) => ({
-      role: (m.sender === "user" ? "user" : "assistant") as
-        | "user"
-        | "assistant",
+      role: (m.sender === "user" ? "user" : "assistant") as "user" | "assistant",
       content: m.content,
     }));
 
@@ -182,9 +180,10 @@ export const _appendOstrichReply = internalMutationGeneric({
           ostrichId: args.ostrichId,
           type: "conversation",
           content: tcArgs.content ?? "",
-          importance: typeof tcArgs.importance === "number"
-            ? Math.max(0, Math.min(1, tcArgs.importance))
-            : 0.5,
+          importance:
+            typeof tcArgs.importance === "number"
+              ? Math.max(0, Math.min(1, tcArgs.importance))
+              : 0.5,
           visibility: tcArgs.visibility ?? "normal",
           relatedPersonIds: [],
           relatedOstrichIds: [],
@@ -203,13 +202,14 @@ export const _appendOstrichReply = internalMutationGeneric({
       senderId: args.ostrichId,
       content: args.content,
       metadata: {
-        toolCalls: processedToolCalls.length > 0
-          ? processedToolCalls.map((tc) => ({
-              toolName: tc.toolName,
-              args: tc.args,
-              pendingPersonId: tc.pendingPersonId,
-            }))
-          : undefined,
+        toolCalls:
+          processedToolCalls.length > 0
+            ? processedToolCalls.map((tc) => ({
+                toolName: tc.toolName,
+                args: tc.args,
+                pendingPersonId: tc.pendingPersonId,
+              }))
+            : undefined,
       },
       createdAt: now,
     });
@@ -236,37 +236,37 @@ export const sendMessage = actionGeneric({
   },
   handler: async (ctx: ActionCtx, args): Promise<SendMessageResult> => {
     // 1. 加载房间 + 鸵鸟 + 历史
-    const ctxData = await ctx.runQuery(
+    const ctxData = (await ctx.runQuery(
       makeFunctionReference<"query">("chat:_loadRoomForSend") as never,
       { roomId: args.roomId } as never,
-    ) as {
+    )) as {
       roomOwnerId: string;
       ostrichId: string;
       history: Array<{ role: "user" | "assistant"; content: string }>;
     };
 
     // 2. 写 user message
-    const userMessageId = await ctx.runMutation(
+    const userMessageId = (await ctx.runMutation(
       makeFunctionReference<"mutation">("chat:_appendUserMessage") as never,
       {
         roomId: args.roomId,
         userId: ctxData.roomOwnerId,
         content: args.content,
       } as never,
-    ) as string;
+    )) as string;
 
     // 3. 调 claude.chat
-    const chatResult = await ctx.runAction(
+    const chatResult = (await ctx.runAction(
       makeFunctionReference<"action">("claude:chat") as never,
       {
         ostrichId: ctxData.ostrichId,
         userMessage: args.content,
         history: ctxData.history,
       } as never,
-    ) as ChatResult;
+    )) as ChatResult;
 
     // 4. 写 ostrich reply + 解析 toolCalls
-    const appendResult = await ctx.runMutation(
+    const appendResult = (await ctx.runMutation(
       makeFunctionReference<"mutation">("chat:_appendOstrichReply") as never,
       {
         roomId: args.roomId,
@@ -275,7 +275,7 @@ export const sendMessage = actionGeneric({
         content: chatResult.text,
         toolCalls: chatResult.toolCalls,
       } as never,
-    ) as { messageId: string; processedToolCalls: unknown };
+    )) as { messageId: string; processedToolCalls: unknown };
 
     return {
       messageId: userMessageId,

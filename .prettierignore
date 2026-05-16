@@ -1,0 +1,11 @@
+node_modules/
+**/_generated/
+*.lock
+pnpm-lock.yaml
+ios/
+.github/
+shared/
+
+# schema.ts 由 ws/convex 维护，结构性多行写法故意保留，
+# 不让 prettier 强行压缩为一行
+convex/schema.ts

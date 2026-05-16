@@ -18,15 +18,15 @@ AI 中介型陌生人社交 App · iOS（SwiftUI）+ Convex 后端
 
 ## 技术栈
 
-| 层 | 选型 |
-|---|---|
-| iOS | Swift 5.10 + SwiftUI（iOS 17+） |
-| 矢量动画 | SwiftUI Canvas + SVG Path + Simplex Noise |
-| 地图渲染 | Apple MapKit（含 3D Flyover + Look Around） |
-| 地图数据（服务端） | Apple Maps Server API |
-| LLM | Claude Sonnet 4.7 |
-| 后端 | Convex (TypeScript) |
-| 多 agent 参考 | a16z-infra/ai-town（fork 改造） |
+| 层                 | 选型                                        |
+| ------------------ | ------------------------------------------- |
+| iOS                | Swift 5.10 + SwiftUI（iOS 17+）             |
+| 矢量动画           | SwiftUI Canvas + SVG Path + Simplex Noise   |
+| 地图渲染           | Apple MapKit（含 3D Flyover + Look Around） |
+| 地图数据（服务端） | Apple Maps Server API                       |
+| LLM                | Claude Sonnet 4.7                           |
+| 后端               | Convex (TypeScript)                         |
+| 多 agent 参考      | a16z-infra/ai-town（fork 改造）             |
 
 ---
 
