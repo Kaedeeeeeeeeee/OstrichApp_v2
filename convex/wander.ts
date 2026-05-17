@@ -100,8 +100,14 @@ export const _loadRestingOstriches = internalQueryGeneric({
       .query("ostriches")
       .withIndex("by_state", (q) => q.eq("state", "wandering"))
       .collect();
+    // 过滤掉已经有 destination 的（避免 cron 和链式调度双触发同一只鸵鸟）。
+    // 链式调度由 decideNextMove 自己末尾负责；cron decideNextMoveBatch 是兜底，
+    // 链断了 15 分钟内会被拾起。
     return all
-      .filter((o) => o.currentActivity === "resting" || o.currentActivity === "exploring")
+      .filter(
+        (o) =>
+          (o.currentActivity === "resting" || o.currentActivity === "exploring") && !o.destination,
+      )
       .map((o) => o._id);
   },
 });
@@ -139,8 +145,12 @@ export const tickAllOstriches = internalMutationGeneric({
       const previousCellId = o.currentLocation.cellId;
 
       if (arrived) {
-        // 到达：用 replace 把 destination / walkingRoute 真正抹掉
-        //（convex-test 0.0.30 在 patch 里对 $undefined 处理有 bug，所以这里走 replace）
+        // 到达：用 replace 把 destination / walkingRoute 抹掉（convex-test 0.0.30 在 patch
+        // 里对 $undefined 处理有 bug，所以这里走 replace）。
+        // currentIntention **保留** —— 它语义上从"想去 X"变成"我现在在 X"，iOS 据
+        // currentActivity 分发文案：walking → 想去；resting → 在 X [verb]。下次
+        // decideNextMove 出发时整段被覆写为新目的地。
+        // 不在这里 schedule 新一段 decideNextMove —— 链式调度由 decideNextMove 自己末尾负责。
         const next = { ...o };
         next.currentLocation = { lat, lng, cellId, friendlyName };
         next.currentActivity = "resting";
@@ -205,6 +215,9 @@ export const _writeDestination = internalMutationGeneric({
     durationMin: v.number(),
     polyline: v.array(v.array(v.number())),
     expectedDurationSec: v.number(),
+    destinationName: v.string(),
+    destinationCategory: v.optional(v.string()),
+    reason: v.string(),
     state: v.optional(v.union(v.literal("awake"), v.literal("wandering"))),
   },
   handler: async (ctx: MutationCtx, args) => {
@@ -223,6 +236,12 @@ export const _writeDestination = internalMutationGeneric({
         startedAt: now,
         expectedDuration: args.expectedDurationSec * 1000,
       },
+      currentIntention: {
+        destinationName: args.destinationName,
+        destinationCategory: args.destinationCategory,
+        reason: args.reason,
+        decidedAt: now,
+      },
     });
   },
 });
@@ -234,7 +253,7 @@ export const _writeDestination = internalMutationGeneric({
 async function fallbackPickPoi(
   lat: number,
   lng: number,
-): Promise<{ lat: number; lng: number; name: string }> {
+): Promise<{ lat: number; lng: number; name: string; category: string }> {
   const nearby = await searchNearby(lat, lng, 5_000);
   // 排掉过近（≤30m）的 POI，防止"出发即到达"
   const candidates = nearby.filter((p) => {
@@ -243,15 +262,16 @@ async function fallbackPickPoi(
     return Math.hypot(dlat, dlng) > 0.0003;
   });
   if (candidates.length === 0) {
-    // 极端 fallback：原地附近随机走 100m
+    // 极端 fallback：原地附近随机走 100m。无 category 用空串，iOS 端走 default verb。
     return {
       lat: lat + (Math.random() - 0.5) * 0.001,
       lng: lng + (Math.random() - 0.5) * 0.001,
       name: "附近",
+      category: "",
     };
   }
   const picked = candidates[Math.floor(Math.random() * candidates.length)];
-  return { lat: picked.lat, lng: picked.lng, name: picked.name };
+  return { lat: picked.lat, lng: picked.lng, name: picked.name, category: picked.category };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -314,6 +334,20 @@ export const decideNextMove = internalActionGeneric({
       state: string;
     };
 
+    // Entry guard：鸵鸟已经被召回 / 沉睡 / 释放 → 终止链条，不再续路。
+    if (profile.state !== "wandering") {
+      return;
+    }
+    // 鸵鸟还在赶往当前目的地（currentActivity="walking" 意味着 walkingRoute / destination 都还在）
+    // → 不该重新决策，否则会"覆盖正在走的路"导致用户看到"刚到一家店就立刻又出发了"。
+    //
+    // 多源调度问题：scheduler.runAfter 在每次 decideNextMove 末尾调度下一段，
+    // 如果某段时间内被多次手动 / cron 触发，pending queue 里会积累多个孤儿 chain，
+    // 它们 fire 时这个 guard 会让它们直接 return（不再 schedule 下一个） → 多余 chain 自然消亡。
+    if (profile.currentActivity === "walking") {
+      return;
+    }
+
     const { lat, lng } = profile.currentLocation;
     const poiList = await searchNearby(lat, lng, 5_000);
     const poiSummary = poiList.map((p) => `- ${p.id} · ${p.name} (${p.category})`).join("\n");
@@ -341,23 +375,37 @@ export const decideNextMove = internalActionGeneric({
       decide = null;
     }
 
+    // 选目的地 + 决定 destinationName / destinationCategory。
+    // category 用来在 iOS 端把"在 X" 后面的动词推出来（咖啡馆 → 喝咖啡，公园 → 歇会儿…）。
     let destLat: number;
     let destLng: number;
+    let destName: string;
+    let destCategory: string;
     if (decide?.destination_poi_id) {
       const picked = poiList.find((p) => p.id === decide!.destination_poi_id);
       if (picked) {
         destLat = picked.lat;
         destLng = picked.lng;
+        destName = picked.name;
+        destCategory = picked.category;
       } else {
         const fb = await fallbackPickPoi(lat, lng);
         destLat = fb.lat;
         destLng = fb.lng;
+        destName = fb.name;
+        destCategory = fb.category;
       }
     } else {
       const fb = await fallbackPickPoi(lat, lng);
       destLat = fb.lat;
       destLng = fb.lng;
+      destName = fb.name;
+      destCategory = fb.category;
     }
+
+    // LLM 没给 reason / decide 整个失败 → graceful fallback 文案。
+    const reasonText =
+      decide?.reason && decide.reason.trim().length > 0 ? decide.reason : "想随便走走";
 
     const route = await walkingRoute({ lat, lng }, { lat: destLat, lng: destLng });
     await ctx.runMutation(
@@ -369,8 +417,21 @@ export const decideNextMove = internalActionGeneric({
         durationMin: decide?.duration_min ?? 30,
         polyline: route.polyline.map(([a, b]) => [a, b]),
         expectedDurationSec: route.expectedDurationSec,
+        destinationName: destName,
+        destinationCategory: destCategory || undefined,
+        reason: reasonText,
         state: "wandering",
       } as never,
+    );
+
+    // 链式调度：走完后歇 5-15 分钟再决策下一段，自动续路。
+    // 在 decideNextMove 入口的 state guard 会拦截已被召回 / 沉睡的鸵鸟，避免孤儿调度乱跑。
+    const restMs = 300_000 + Math.random() * 600_000; // 5-15 分钟
+    const nextRunMs = route.expectedDurationSec * 1000 + restMs;
+    await ctx.scheduler.runAfter(
+      nextRunMs,
+      makeFunctionReference<"action">("wander:decideNextMove"),
+      { ostrichId: args.ostrichId } as never,
     );
   },
 });
@@ -379,6 +440,30 @@ export const decideNextMove = internalActionGeneric({
 // internalAction · decideNextMoveBatch
 //   cron 入口，对所有 resting / exploring 的 wandering 鸵鸟逐一调 decideNextMove。
 // ─────────────────────────────────────────────────────────────
+
+// 临时 probe：dump 涩谷站附近 Apple Maps 返回的 POI 列表 + 类别分布。
+// 调试用，确认完毕可删。
+export const _probeSearchNearby = internalActionGeneric({
+  args: {
+    lat: v.number(),
+    lng: v.number(),
+    radius_m: v.number(),
+  },
+  handler: async (_ctx: ActionCtx, args) => {
+    const pois = await searchNearby(args.lat, args.lng, args.radius_m);
+    const counts: Record<string, number> = {};
+    for (const p of pois) {
+      counts[p.category] = (counts[p.category] ?? 0) + 1;
+    }
+    console.log("[probe] POI count:", pois.length);
+    console.log("[probe] category distribution:", JSON.stringify(counts, null, 2));
+    console.log("[probe] full list:");
+    for (const p of pois) {
+      console.log(`  - [${p.category}] ${p.name}`);
+    }
+    return { total: pois.length, counts, pois };
+  },
+});
 
 export const decideNextMoveBatch = internalActionGeneric({
   args: {},

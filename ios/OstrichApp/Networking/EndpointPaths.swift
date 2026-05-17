@@ -13,6 +13,14 @@ public enum Endpoints {
     public static let ostrichSelf = "/api/ostrich/self"
     public static let callHome = "/api/ostrich/callHome"
     public static let allowToStay = "/api/ostrich/allowToStay"
+    /// 进 wander tab 时调，把鸵鸟切到 wandering 并 fire-and-forget 触发首次 decideNextMove。
+    public static let wanderStart = "/api/wander/start"
+
+    // 1.2.1 鸵鸟内心独白（头顶气泡）
+    /// POST：立刻建一行 ostrich_thoughts(streaming)，返回 thoughtId，后台流式填内容
+    public static let think = "/api/ostrich/think"
+    /// GET：轮询拿 content + status。后接 thoughtId。
+    public static let thought = "/api/ostrich/thought/"
 
     // 1.3 传心
     public static let chatSend = "/api/chat/send"

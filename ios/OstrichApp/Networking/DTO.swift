@@ -79,6 +79,44 @@ public struct LocationDTO: Codable, Equatable {
     }
 }
 
+// MARK: - Thoughts (头顶气泡)
+
+/// `/api/ostrich/thought/:id` 返回。流式期间 status="streaming"，content 在每次轮询时逐步增长；
+/// status="done" 后停止轮询、启动 10s 淡出。
+public struct ThoughtDTO: Codable, Equatable {
+    public let id: String
+    public let content: String
+    public let status: String            // "streaming" | "done" | "error"
+    public let activityContext: String
+    public let locationName: String
+    public let createdAt: String
+
+    public init(
+        id: String,
+        content: String,
+        status: String,
+        activityContext: String,
+        locationName: String,
+        createdAt: String
+    ) {
+        self.id = id
+        self.content = content
+        self.status = status
+        self.activityContext = activityContext
+        self.locationName = locationName
+        self.createdAt = createdAt
+    }
+}
+
+/// `/api/ostrich/think` POST 返回。
+public struct ThoughtCreateResponseDTO: Codable, Equatable {
+    public let thoughtId: String
+
+    public init(thoughtId: String) {
+        self.thoughtId = thoughtId
+    }
+}
+
 // MARK: - Chat / Messages
 
 public struct MessageDTO: Codable, Equatable {
@@ -145,6 +183,9 @@ public struct PersonDTO: Codable, Equatable {
     public let notes: String
     public let hasOstrich: Bool
     public let lastMentionedAt: String
+    /// 该人物被多少字符的记忆引用。关系图谱光球生成频率的输入。
+    /// 老版本后端 / 缺省时取 0。INTERFACES.md §1.4。
+    public let memoryWeight: Double?
 
     public init(
         id: String,
@@ -155,7 +196,8 @@ public struct PersonDTO: Codable, Equatable {
         recentInteractionCount: Int,
         notes: String,
         hasOstrich: Bool,
-        lastMentionedAt: String
+        lastMentionedAt: String,
+        memoryWeight: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -166,6 +208,7 @@ public struct PersonDTO: Codable, Equatable {
         self.notes = notes
         self.hasOstrich = hasOstrich
         self.lastMentionedAt = lastMentionedAt
+        self.memoryWeight = memoryWeight
     }
 }
 
@@ -321,11 +364,32 @@ public struct MapLocalViewResponseDTO: Codable, Equatable {
     public let ostrich: MapPointDTO
     public let nearby: [MapPointDTO]
     public let route: PolylineDTO?
+    /// 鸵鸟当前 POI 友好名。
+    /// - walking 时：还在路上想去的目的地
+    /// - resting/exploring/socializing 时：到了，正在这家店里
+    /// 同一份数据双重语义（INTERFACES.md §1.6）。
+    public let destinationName: String?
+    /// Apple Maps POI category（如 "Cafe" / "Park" / "Bookstore"）。
+    /// iOS 端按它推动词："在 X [喝咖啡 / 歇会儿 / 翻翻书]..."。
+    /// fallback POI（极端"附近"分支）无此字段。
+    public let destinationCategory: String?
+    /// LLM 给出的"为什么想去"（fallback 时是 "想随便走走"）。
+    public let reason: String?
 
-    public init(ostrich: MapPointDTO, nearby: [MapPointDTO], route: PolylineDTO? = nil) {
+    public init(
+        ostrich: MapPointDTO,
+        nearby: [MapPointDTO],
+        route: PolylineDTO? = nil,
+        destinationName: String? = nil,
+        destinationCategory: String? = nil,
+        reason: String? = nil
+    ) {
         self.ostrich = ostrich
         self.nearby = nearby
         self.route = route
+        self.destinationName = destinationName
+        self.destinationCategory = destinationCategory
+        self.reason = reason
     }
 }
 

@@ -151,6 +151,18 @@ type OstrichRow = {
   state: string;
   currentLocation: { lat: number; lng: number; friendlyName: string };
   currentActivity: string;
+  destination?: { lat: number; lng: number; eta: number };
+  walkingRoute?: {
+    polyline: number[][];
+    startedAt: number;
+    expectedDuration: number;
+  };
+  currentIntention?: {
+    destinationName: string;
+    destinationCategory?: string;
+    reason: string;
+    decidedAt: number;
+  };
 };
 
 function toOstrichDTO(o: OstrichRow): Record<string, unknown> {
@@ -184,7 +196,7 @@ type PersonRow = {
   lastMentionedAt: number;
 };
 
-function toPersonDTO(p: PersonRow): Record<string, unknown> {
+function toPersonDTO(p: PersonRow, memoryWeight = 0): Record<string, unknown> {
   return {
     id: p._id,
     name: p.name,
@@ -195,6 +207,9 @@ function toPersonDTO(p: PersonRow): Record<string, unknown> {
     notes: p.notes,
     hasOstrich: p.hasOstrich,
     lastMentionedAt: new Date(p.lastMentionedAt).toISOString(),
+    // 这个人被多少字符的记忆引用 — 关系图谱光球生成频率的输入。
+    // 未关联任何记忆时为 0。
+    memoryWeight,
   };
 }
 
@@ -341,6 +356,40 @@ export const _listPeopleByOwner = internalQueryGeneric({
       .query("people")
       .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
       .collect();
+  },
+});
+
+/**
+ * 算出 owner 名下每个 person 被记忆引用的总字符数。
+ * 返回 { [personId]: totalCharCount }。没被引用过的 person 不会出现在 map 里 — 调用方按 0 兜底。
+ *
+ * 用途：关系图谱光球生成频率 — 记忆里越多字提到 ta，飞向 ta 的光球越密。
+ * 实现：memories 表无 personId 索引，按 ostrich 拉全量然后扫 relatedPersonIds。
+ * demo 阶段记忆条数 < 几百，O(memories) 完全 OK。
+ */
+export const _computeMemoryWeightsByOwner = internalQueryGeneric({
+  args: { ownerId: v.id("users") },
+  handler: async (ctx: QueryCtx, args) => {
+    const ostriches = await ctx.db
+      .query("ostriches")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect();
+
+    const weights: Record<string, number> = {};
+    for (const ostrich of ostriches) {
+      const memories = await ctx.db
+        .query("memories")
+        .withIndex("by_ostrich", (q) => q.eq("ostrichId", ostrich._id))
+        .collect();
+      for (const memory of memories) {
+        const charCount = memory.content.length;
+        if (charCount === 0) continue;
+        for (const pid of memory.relatedPersonIds) {
+          weights[pid] = (weights[pid] ?? 0) + charCount;
+        }
+      }
+    }
+    return weights;
   },
 });
 
@@ -608,6 +657,117 @@ http.route({
   }),
 });
 
+/**
+ * POST /api/wander/start
+ *
+ * iOS 端用户进 wander tab 时调用。语义：
+ *   1. 若鸵鸟还不是 wandering 状态（比如刚 onboarding 出来的 "awake"），切到 wandering
+ *   2. 若鸵鸟尚未有 destination，fire-and-forget 触发一次 decideNextMove
+ *      （Apple Maps + LLM 决策约 3-5s，不阻塞这个请求；前端轮询 mapLocal 感知）
+ *   3. sleeping_in_egg 的鸵鸟拒绝（呼应 callHome 的边界）
+ *
+ * decideNextMove 末尾会链式调度下一次自己，所以一旦启动后无需再次主动触发，
+ * cron decideNextMoveBatch 是兜底。
+ */
+http.route({
+  path: "/api/wander/start",
+  method: "POST",
+  handler: httpActionGeneric(async (ctx, request) => {
+    return withErrorEnvelope(async () => {
+      const ostrich = await loadCurrentOstrich(ctx, request);
+      if (ostrich.state === "sleeping_in_egg") {
+        throw new HttpError("OSTRICH_SLEEPING", "鸵鸟正在沉睡");
+      }
+      if (ostrich.state !== "wandering") {
+        await ctx.runMutation(
+          makeFunctionReference<"mutation">("http:_setOstrichState") as never,
+          { ostrichId: ostrich._id, state: "wandering" } as never,
+        );
+      }
+      if (!ostrich.destination) {
+        await ctx.scheduler.runAfter(0, makeFunctionReference<"action">("wander:decideNextMove"), {
+          ostrichId: ostrich._id,
+        } as never);
+      }
+      return okResponse({ ok: true });
+    });
+  }),
+});
+
+// ────────────── 1.2.1 鸵鸟内心独白（头顶气泡）──────────────
+//
+// POST /api/ostrich/think
+//   立刻建一行 ostrich_thoughts (status="streaming")，返回 thoughtId，
+//   后台异步调度 generateThought 把内容流式填进去。
+//
+// GET /api/ostrich/thought/:id
+//   iOS 端 ~300ms 轮询，看 content 增长 + status 变化。
+
+http.route({
+  path: "/api/ostrich/think",
+  method: "POST",
+  handler: httpActionGeneric(async (ctx, request) => {
+    return withErrorEnvelope(async () => {
+      const ostrich = await loadCurrentOstrich(ctx, request);
+      if (ostrich.state === "sleeping_in_egg") {
+        throw new HttpError("OSTRICH_SLEEPING", "鸵鸟正在沉睡");
+      }
+      if (ostrich.state === "released") {
+        throw new HttpError("OSTRICH_NOT_FOUND", "Ostrich has been released");
+      }
+      // 建 thought 行拿 id 立刻返回，async 调度 generateThought
+      const thoughtId = (await ctx.runMutation(
+        makeFunctionReference<"mutation">("thoughts:_createThought") as never,
+        {
+          ostrichId: ostrich._id,
+          activityContext: ostrich.currentActivity,
+          locationName: ostrich.currentLocation.friendlyName,
+        } as never,
+      )) as Id<"ostrich_thoughts">;
+      await ctx.scheduler.runAfter(0, makeFunctionReference<"action">("thoughts:generateThought"), {
+        thoughtId,
+      } as never);
+      return okResponse({ thoughtId });
+    });
+  }),
+});
+
+// path 参数：/api/ostrich/thought/:id
+http.route({
+  pathPrefix: "/api/ostrich/thought/",
+  method: "GET",
+  handler: httpActionGeneric(async (ctx, request) => {
+    return withErrorEnvelope(async () => {
+      requireAuth(request);
+      const url = new URL(request.url);
+      const thoughtId = url.pathname.replace("/api/ostrich/thought/", "").replace(/\/$/, "");
+      if (!thoughtId) throw new HttpError("BAD_REQUEST", "thoughtId missing in path");
+      const thought = (await ctx.runQuery(
+        makeFunctionReference<"query">("thoughts:_getThoughtById") as never,
+        { thoughtId } as never,
+      )) as {
+        _id: Id<"ostrich_thoughts">;
+        content: string;
+        status: string;
+        activityContext: string;
+        locationName: string;
+        createdAt: number;
+      } | null;
+      if (!thought) {
+        throw new HttpError("BAD_REQUEST", "Thought not found");
+      }
+      return okResponse({
+        id: thought._id,
+        content: thought.content,
+        status: thought.status,
+        activityContext: thought.activityContext,
+        locationName: thought.locationName,
+        createdAt: new Date(thought.createdAt).toISOString(),
+      });
+    });
+  }),
+});
+
 // ────────────── 1.3 传心 ──────────────
 
 http.route({
@@ -730,17 +890,23 @@ http.route({
   handler: httpActionGeneric(async (ctx, request) => {
     return withErrorEnvelope(async () => {
       const ostrich = await loadCurrentOstrich(ctx, request);
-      const people = (await ctx.runQuery(
-        makeFunctionReference<"query">("http:_listPeopleByOwner") as never,
-        { ownerId: ostrich.ownerId } as never,
-      )) as PersonRow[];
+      const [people, memoryWeights] = await Promise.all([
+        ctx.runQuery(
+          makeFunctionReference<"query">("http:_listPeopleByOwner") as never,
+          { ownerId: ostrich.ownerId } as never,
+        ) as Promise<PersonRow[]>,
+        ctx.runQuery(
+          makeFunctionReference<"query">("http:_computeMemoryWeightsByOwner") as never,
+          { ownerId: ostrich.ownerId } as never,
+        ) as Promise<Record<string, number>>,
+      ]);
       const edges = people.map((p) => ({
         fromPersonId: "self",
         toPersonId: p._id,
         weight: p.closeness,
       }));
       return okResponse({
-        people: people.map(toPersonDTO),
+        people: people.map((p) => toPersonDTO(p, memoryWeights[p._id] ?? 0)),
         edges,
       });
     });
@@ -883,10 +1049,22 @@ http.route({
         lng: ostrich.currentLocation.lng,
         activity: ostrich.currentActivity,
       };
+      // 把后端 ostrich.walkingRoute 透传为 PolylineDTO 形态供前端 WalkingSimulator 接管。
+      // 单位转换：后端 expectedDuration 是 ms，DTO 字段是 expectedDurationSec。
+      const route = ostrich.walkingRoute
+        ? {
+            coords: ostrich.walkingRoute.polyline,
+            expectedDurationSec: Math.round(ostrich.walkingRoute.expectedDuration / 1000),
+            startedAt: new Date(ostrich.walkingRoute.startedAt).toISOString(),
+          }
+        : undefined;
       return okResponse({
         ostrich: ostrichPoint,
         nearby: [],
-        route: undefined,
+        route,
+        destinationName: ostrich.currentIntention?.destinationName,
+        destinationCategory: ostrich.currentIntention?.destinationCategory,
+        reason: ostrich.currentIntention?.reason,
       });
     });
   }),

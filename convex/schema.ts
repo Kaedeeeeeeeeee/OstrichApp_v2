@@ -107,6 +107,22 @@ export default defineSchema({
       fatigue: v.number(),
       curiosity: v.number(),
     }),
+
+    // 当前决策（来自 decideNextMove）。
+    //   - 出发时写入：destinationName / destinationCategory / reason
+    //   - 到达后不再删除：此时同一份数据语义上变成 "我现在在哪 + 来这里的原因"，
+    //     iOS 据 currentActivity 分发：walking → "想去 X / [reason]"；
+    //     resting/exploring/socializing → "在 X [按 category 推 verb]..."
+    //   - 下次 decideNextMove 出发时整段被覆写为新目的地
+    // 用户在 wander tab 看到的"鸵鸟正在做啥"全部走这一份数据。
+    currentIntention: v.optional(
+      v.object({
+        destinationName: v.string(),
+        destinationCategory: v.optional(v.string()),
+        reason: v.string(),
+        decidedAt: v.number(),
+      }),
+    ),
   })
     .index("by_owner", ["ownerId"])
     .index("by_state", ["state"])
@@ -309,5 +325,30 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_ostrich", ["ostrichId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // ───────────────────────────────────────────────────────────
+  // 12. ostrich_thoughts — 实时内心独白（头顶气泡）
+  //     仅用户观看 LocalView 时按 1-3min 节奏生成。
+  //     - status="streaming"：Anthropic 流式中,content 逐 chunk 增长
+  //     - status="done"     ：完整内容已落库
+  //     - status="error"    ：LLM 调用失败
+  //     activityContext 决定 prompt 风格（走路看路边 / 在店里体验）
+  //     expiresAt 由 cleanup cron 兜底（Phase 1 demo 阶段表小,不强求清理）
+  // ───────────────────────────────────────────────────────────
+  ostrich_thoughts: defineTable({
+    ostrichId: v.id("ostriches"),
+    content: v.string(),
+    status: v.union(
+      v.literal("streaming"),
+      v.literal("done"),
+      v.literal("error"),
+    ),
+    activityContext: v.string(), // "walking" | "resting" | "exploring"
+    locationName: v.string(), // 生成时的 friendlyName 快照
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_ostrich_createdAt", ["ostrichId", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
 });

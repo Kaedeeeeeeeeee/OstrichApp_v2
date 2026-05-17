@@ -1,90 +1,54 @@
 // LocalViewView.swift
-// 局域视角：3D 卫星地图 + 鸵鸟图标 annotation + 顶部对话气泡 + 底部两个按钮。
-// BLUEPRINT §10.3 LocalView + DEMO_SCRIPT 03:00-04:00。
+// 局域视角 overlay：顶栏（返回 + activity 标签）+ speechBubble + Look Around 按钮 + 底部双按钮。
 //
-// - 进入时拉 .mapLocal 拿当前位置 + route + activity
-// - 用 WalkingSimulator 沿 polyline 真实步行时间插值 currentCoord
-// - 顶部鸵鸟对话气泡（OstrichCard 风格），demo mock 文案
-// - 底部「让 ta 继续玩」(allowToStay) / 「已回家」(切回 god view)
-// - 左上角「返回上帝视角」小按钮
-// - 中下「想看看这里长什么样吗？」按钮 → Look Around sheet
+// 重构后职责（v3）：只渲染 UI overlay。
+//   - 地图由 WanderView 持有的共享 OstrichMapView 渲染（无需自己 import MapKit）。
+//   - 数据（destinationName/category/reason/activity/isLoadingRoute）由 WanderView 维护并传入。
+//   - 按钮 action 通过 callback 上报。
+//   - Look Around sheet 由 WanderView 持有。
+//
+// speechBubble 状态机（按 activityLabel + isLoadingRoute 分发）：
+//   1. isLoadingRoute → spinner + "ta 在想去哪儿…"
+//   2. activity="walking" + 有 destinationName + reason
+//        → "想去 [名]"\n[reason]   （鸵鸟的目的地 + 解释）
+//   3. activity in {resting, exploring, socializing} + 有 destinationName
+//        → "在 [名] [verb]" + 动画点点     （鸵鸟到了，正在体验）
+//        verb 由 destinationCategory 经 LocalActivityVerb 推出来
+//   4. 兜底 → "在附近转转…"
 
 import SwiftUI
-import Combine
-import CoreLocation
-import MapKit
 
 struct LocalViewView: View {
 
-    let client: ConvexClientProtocol
+    let destinationName: String?
+    let destinationCategory: String?
+    let reason: String?
+    let activityLabel: String
+    let isLoadingRoute: Bool
+    let inFlightAction: Bool
     let onBackToGod: () -> Void
-
-    @State private var localData: MapLocalViewResponseDTO?
-    @State private var simulator: WalkingSimulator?
-    @State private var ostrichCoord: CLLocationCoordinate2D = OstrichMapDefaults.shibuyaStation
-    @State private var ostrichSpeechText: String = "我在表参道附近转转，碰到一只叫飒飒的鸵鸟，它主人是个音乐人……"
-    @State private var showLookAround: Bool = false
-    @State private var loadFailed: Bool = false
-    @State private var inFlightAction: Bool = false
+    let onCallHome: () -> Void
+    let onAllowToStay: () -> Void
+    let onLookAround: () -> Void
 
     var body: some View {
-        ZStack(alignment: .top) {
-            mapLayer
-
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, OstrichSpacing.l)
-                    .padding(.top, OstrichSpacing.s)
-                speechBubble
-                    .padding(.horizontal, OstrichSpacing.l)
-                    .padding(.top, OstrichSpacing.s)
-                Spacer()
-                lookAroundCallout
-                    .padding(.bottom, OstrichSpacing.s)
-                bottomBar
-                    .padding(.horizontal, OstrichSpacing.l)
-                    .padding(.bottom, OstrichSpacing.xl)
-            }
-        }
-        .task {
-            await loadLocalView()
-        }
-        .onDisappear {
-            simulator?.stop()
-        }
-        .sheet(isPresented: $showLookAround) {
-            LookAroundBridge(coordinate: ostrichCoord) {
-                showLookAround = false
-            }
-            .presentationDetents([.large])
+        VStack(spacing: 0) {
+            topBar
+                .padding(.horizontal, OstrichSpacing.l)
+                .padding(.top, OstrichSpacing.s)
+            speechBubble
+                .padding(.horizontal, OstrichSpacing.l)
+                .padding(.top, OstrichSpacing.s)
+            Spacer()
+            lookAroundCallout
+                .padding(.bottom, OstrichSpacing.s)
+            bottomBar
+                .padding(.horizontal, OstrichSpacing.l)
+                .padding(.bottom, OstrichSpacing.xl)
         }
     }
 
     // MARK: - Sections
-
-    private var mapLayer: some View {
-        let route = simulator?.route ?? []
-        return OstrichMapView(
-            ostrichCoord: ostrichCoord,
-            nearbyCoords: (localData?.nearby ?? []).map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
-            route: route,
-            followsOstrich: true
-        )
-        .ignoresSafeArea()
-        .onReceive(simulatorPublisher) { coord in
-            self.ostrichCoord = coord
-        }
-    }
-
-    /// 兼容 nil simulator 的合并 publisher。
-    private var simulatorPublisher: AnyPublisherWrapper<CLLocationCoordinate2D> {
-        if let sim = simulator {
-            return AnyPublisherWrapper(sim.$currentCoord.eraseToAnyPublisher())
-        } else {
-            // 永不发射，占位。
-            return AnyPublisherWrapper(Empty<CLLocationCoordinate2D, Never>().eraseToAnyPublisher())
-        }
-    }
 
     private var topBar: some View {
         HStack {
@@ -103,8 +67,8 @@ struct LocalViewView: View {
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
             }
             Spacer()
-            if let friendly = localData?.ostrich.activity, !friendly.isEmpty {
-                Text(friendly)
+            if !activityLabel.isEmpty {
+                Text(activityLabel)
                     .font(OstrichTypography.caption)
                     .foregroundStyle(OstrichColors.ink)
                     .padding(.horizontal, OstrichSpacing.m)
@@ -117,24 +81,68 @@ struct LocalViewView: View {
         }
     }
 
+    /// activityLabel 是否表示鸵鸟到了某个 POI 在体验（resting / exploring / socializing）。
+    /// walking 是"在路上"，跟到达后的"在 X 干 Y"是两种文案。
+    private var isAtPlace: Bool {
+        let v = activityLabel.lowercased()
+        return v == "resting" || v == "exploring" || v == "socializing"
+    }
+
+    @ViewBuilder
     private var speechBubble: some View {
         OstrichCard {
-            VStack(alignment: .leading, spacing: OstrichSpacing.xs) {
-                Text("鸵鸟在说")
-                    .font(OstrichTypography.caption)
-                    .foregroundStyle(OstrichColors.ink.opacity(0.5))
-                Text(ostrichSpeechText)
-                    .font(OstrichTypography.body)
-                    .foregroundStyle(OstrichColors.ink)
+            if isLoadingRoute {
+                HStack(spacing: OstrichSpacing.s) {
+                    ProgressView()
+                        .scaleEffect(0.85)
+                    Text("ta 在想去哪儿…")
+                        .font(OstrichTypography.callout)
+                        .foregroundStyle(OstrichColors.ink.opacity(0.7))
+                }
+            } else if isAtPlace, let name = destinationName, !name.isEmpty {
+                // 到了：在 X [verb] ●●●
+                let verb = LocalActivityVerb.verb(for: destinationCategory)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    (
+                        Text("在 ")
+                            .foregroundStyle(OstrichColors.ink.opacity(0.55))
+                        + Text(name)
+                            .foregroundStyle(OstrichColors.ink)
+                            .fontWeight(.semibold)
+                        + Text(" \(verb)")
+                            .foregroundStyle(OstrichColors.ink.opacity(0.85))
+                    )
+                    .font(OstrichTypography.callout)
+                    .lineLimit(2)
+                    LocalAnimatedDots()
+                        .padding(.leading, 6)
+                        .padding(.bottom, 2)
+                }
+            } else if let name = destinationName, let r = reason, !name.isEmpty, !r.isEmpty {
+                // 走路：想去 X / [reason]
+                VStack(alignment: .leading, spacing: OstrichSpacing.xs) {
+                    Text("想去")
+                        .font(OstrichTypography.caption)
+                        .foregroundStyle(OstrichColors.ink.opacity(0.5))
+                    Text(name)
+                        .font(OstrichTypography.body)
+                        .fontWeight(.bold)
+                        .foregroundStyle(OstrichColors.ink)
+                    Text(r)
+                        .font(OstrichTypography.callout)
+                        .foregroundStyle(OstrichColors.ink.opacity(0.75))
+                }
+            } else {
+                Text("在附近转转…")
+                    .font(OstrichTypography.callout)
+                    .foregroundStyle(OstrichColors.ink.opacity(0.6))
             }
         }
         .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
     }
 
     private var lookAroundCallout: some View {
-        Button {
-            showLookAround = true
-        } label: {
+        Button(action: onLookAround) {
             HStack(spacing: OstrichSpacing.s) {
                 Image(systemName: "binoculars.fill")
                     .font(.system(size: 15, weight: .semibold))
@@ -152,10 +160,11 @@ struct LocalViewView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: OstrichSpacing.m) {
-            Button {
-                Task { await sendAllowToStay() }
-            } label: {
+        // 在 loading（鸵鸟还没决策出第一段路）时禁用召回相关按钮，
+        // 避免用户在鸵鸟"没出门"前就召回，造成后端状态错位。
+        let buttonsDisabled = inFlightAction || isLoadingRoute
+        return HStack(spacing: OstrichSpacing.m) {
+            Button(action: onAllowToStay) {
                 Text("让 ta 继续玩")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(OstrichColors.ink)
@@ -164,13 +173,12 @@ struct LocalViewView: View {
                     .background(
                         Capsule().fill(OstrichColors.cream)
                     )
+                    .opacity(buttonsDisabled ? 0.5 : 1)
             }
-            .disabled(inFlightAction)
+            .disabled(buttonsDisabled)
 
-            Button {
-                Task { await sendCallHome() }
-            } label: {
-                Text("已回家")
+            Button(action: onCallHome) {
+                Text("叫回家")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(OstrichColors.cream)
                     .frame(maxWidth: .infinity)
@@ -178,99 +186,110 @@ struct LocalViewView: View {
                     .background(
                         Capsule().fill(OstrichColors.ink)
                     )
+                    .opacity(buttonsDisabled ? 0.5 : 1)
             }
-            .disabled(inFlightAction)
+            .disabled(buttonsDisabled)
         }
         .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
     }
+}
 
-    // MARK: - Networking
+// MARK: - 动画点点（"在 X 干 Y..." 后面那三个会动的点）
+//
+// 3 个圆点 opacity 波纹：每个相位错开 0.18s，整体呈 "1 2 3 1 2 3..." 流动感。
+// 用 opacity（而非 y-offset）—— 不影响行高，能干净地与 baseline 文字混排。
 
-    private func loadLocalView() async {
-        do {
-            let response: MapLocalViewResponseDTO = try await client.get(Endpoints.mapLocal)
-            self.localData = response
-            let coord = CLLocationCoordinate2D(
-                latitude: response.ostrich.lat,
-                longitude: response.ostrich.lng
-            )
-            self.ostrichCoord = coord
-            if let route = response.route,
-               let sim = WalkingSimulator.fromPolyline(route) {
-                self.simulator = sim
-                sim.start()
-            } else {
-                self.simulator = nil
+private struct LocalAnimatedDots: View {
+
+    @State private var animating: Bool = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(OstrichColors.ink.opacity(0.55))
+                    .frame(width: 4, height: 4)
+                    .opacity(animating ? 1.0 : 0.25)
+                    .animation(
+                        .easeInOut(duration: 0.55)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(i) * 0.18),
+                        value: animating
+                    )
             }
-        } catch {
-            // 后端没起也要 demo 可走 —— 给一段涩谷站短路线作为 fallback。
-            self.loadFailed = true
-            let fallback = WalkingSimulator(
-                route: Self.fallbackRoute,
-                startedAt: Date().addingTimeInterval(-30),
-                expectedDuration: 300
-            )
-            self.simulator = fallback
-            fallback.start()
-            self.ostrichCoord = Self.fallbackRoute[0]
         }
-    }
-
-    private func sendCallHome() async {
-        guard !inFlightAction else { return }
-        inFlightAction = true
-        defer { inFlightAction = false }
-        do {
-            let _: CallHomeResponseDTO = try await client.call(Endpoints.callHome, body: EmptyBody())
-        } catch {
-            // demo 阶段失败不阻塞，仍切回 god view。
-        }
-        onBackToGod()
-    }
-
-    private func sendAllowToStay() async {
-        guard !inFlightAction else { return }
-        inFlightAction = true
-        defer { inFlightAction = false }
-        do {
-            let _: OkResponseDTO = try await client.call(Endpoints.allowToStay, body: EmptyBody())
-        } catch {
-            // 同上
-        }
-        onBackToGod()
-    }
-
-    // MARK: - Fallback
-
-    /// 涩谷站 → 表参道方向的一段 mock 步行路线，确保后端不可用时仍有动效。
-    static let fallbackRoute: [CLLocationCoordinate2D] = [
-        CLLocationCoordinate2D(latitude: 35.6595, longitude: 139.7005),
-        CLLocationCoordinate2D(latitude: 35.6610, longitude: 139.7025),
-        CLLocationCoordinate2D(latitude: 35.6628, longitude: 139.7044),
-        CLLocationCoordinate2D(latitude: 35.6648, longitude: 139.7062),
-        CLLocationCoordinate2D(latitude: 35.6665, longitude: 139.7085)
-    ]
-}
-
-// MARK: - Combine 兼容（避免在 View body 里直接 onReceive 一个可空 publisher）
-
-struct AnyPublisherWrapper<Output>: Publisher {
-    typealias Failure = Never
-
-    private let upstream: AnyPublisher<Output, Never>
-
-    init(_ upstream: AnyPublisher<Output, Never>) {
-        self.upstream = upstream
-    }
-
-    func receive<S>(subscriber: S) where S: Subscriber, Never == S.Failure, Output == S.Input {
-        upstream.receive(subscriber: subscriber)
+        .onAppear { animating = true }
     }
 }
 
-/// 空 body 占位（POST body 字段为 `{}`）。
-private struct EmptyBody: Encodable {}
+#Preview("loading") {
+    ZStack {
+        Color.gray.ignoresSafeArea()
+        LocalViewView(
+            destinationName: nil,
+            destinationCategory: nil,
+            reason: nil,
+            activityLabel: "resting",
+            isLoadingRoute: true,
+            inFlightAction: false,
+            onBackToGod: {},
+            onCallHome: {},
+            onAllowToStay: {},
+            onLookAround: {}
+        )
+    }
+}
 
-#Preview {
-    LocalViewView(client: MockConvexClient(), onBackToGod: {})
+#Preview("walking intention") {
+    ZStack {
+        Color.gray.ignoresSafeArea()
+        LocalViewView(
+            destinationName: "%%% Coffee 表参道店",
+            destinationCategory: "Cafe",
+            reason: "听说他们今天有新的肉桂拿铁",
+            activityLabel: "walking",
+            isLoadingRoute: false,
+            inFlightAction: false,
+            onBackToGod: {},
+            onCallHome: {},
+            onAllowToStay: {},
+            onLookAround: {}
+        )
+    }
+}
+
+#Preview("at place · cafe") {
+    ZStack {
+        Color.gray.ignoresSafeArea()
+        LocalViewView(
+            destinationName: "Sigourny Bake & Coffee",
+            destinationCategory: "Cafe",
+            reason: "听说他们今天有新的肉桂拿铁",
+            activityLabel: "resting",
+            isLoadingRoute: false,
+            inFlightAction: false,
+            onBackToGod: {},
+            onCallHome: {},
+            onAllowToStay: {},
+            onLookAround: {}
+        )
+    }
+}
+
+#Preview("at place · park") {
+    ZStack {
+        Color.gray.ignoresSafeArea()
+        LocalViewView(
+            destinationName: "新宿御苑",
+            destinationCategory: "Park",
+            reason: "想看看树",
+            activityLabel: "resting",
+            isLoadingRoute: false,
+            inFlightAction: false,
+            onBackToGod: {},
+            onCallHome: {},
+            onAllowToStay: {},
+            onLookAround: {}
+        )
+    }
 }
