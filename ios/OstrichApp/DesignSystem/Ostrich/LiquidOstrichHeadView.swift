@@ -17,10 +17,12 @@ public struct LiquidOstrichHeadView: View {
     /// 心情 0..1（保留接口，目前未用于渲染差异化）。
     public var mood: Double
 
-    /// 视图尺寸（正方形）。
-    public var size: CGFloat
+    /// 视图尺寸（正方形）。`nil` = 填满父容器（推荐用于 Onboarding/Home 全屏 hero，
+    /// 按 v4 HTML `.stage { position: absolute; inset: 0 }` 的语义铺满）。
+    /// 数值 = 强制方形 size×size（适合 inline 小尺寸用法）。
+    public var size: CGFloat?
 
-    public init(mood: Double = 0.5, size: CGFloat = 320) {
+    public init(mood: Double = 0.5, size: CGFloat? = nil) {
         self.mood = mood
         self.size = size
     }
@@ -173,7 +175,19 @@ public struct LiquidOstrichHeadView: View {
                     }
             )
         }
-        .frame(width: size, height: size)
+        .modifier(SizingModifier(size: size))
+    }
+
+    /// 按 size 决定固定方形或填满父容器。
+    private struct SizingModifier: ViewModifier {
+        let size: CGFloat?
+        func body(content: Content) -> some View {
+            if let size {
+                content.frame(width: size, height: size)
+            } else {
+                content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 
     // MARK: - FPS instrumentation (Phase 1 §16.1 R1)
