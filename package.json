@@ -7,9 +7,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint convex --ext .ts",
-    "format": "prettier --write 'convex/**/*.ts' '*.json' '*.md'",
-    "format:check": "prettier --check 'convex/**/*.ts'"
+    "lint": "eslint convex tests --ext .ts",
+    "format": "prettier --write 'convex/**/*.ts' 'tests/**/*.ts' '*.json' '*.md'",
+    "format:check": "prettier --check 'convex/**/*.ts' 'tests/**/*.ts'"
   },
   "keywords": [],
   "author": "",

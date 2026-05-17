@@ -6,7 +6,7 @@ import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import type { GenericId as Id } from "convex/values";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import schema from "../schema";
+import schema from "../../convex/schema";
 
 // vite's import.meta.glob 类型本地最小声明，避免引入 @types/vite 依赖。
 declare global {
@@ -119,7 +119,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 // convex-test 需要拿到所有 convex/ 函数模块 + 至少一个 _generated/ 下的文件以定位 modules root。
 // 用 import.meta.glob 抓 .ts (生产函数) + .js (_generated stub) 两种扩展。
-const modules = import.meta.glob("../**/*.{ts,js}");
+const modules = import.meta.glob("../../convex/**/*.{ts,js}");
 
 function makeT() {
   return convexTest(schema, modules);

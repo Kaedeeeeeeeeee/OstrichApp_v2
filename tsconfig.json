@@ -13,12 +13,12 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "allowJs": false,
-    "types": [],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@/convex/*": ["./convex/*"]
     }
   },
-  "include": ["convex/**/*.ts"],
+  "include": ["convex/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "convex/_generated", "ios", "shared/reference"]
 }
