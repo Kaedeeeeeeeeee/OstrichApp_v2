@@ -58,6 +58,9 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .task {
+            await signInIfNeeded()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .resetOnboarding)) { _ in
             hasCompletedOnboarding = false
             mainRoomId = ""
@@ -66,6 +69,22 @@ struct RootView: View {
             withAnimation(.easeInOut(duration: 0.4)) {
                 phase = .onboarding
             }
+        }
+    }
+
+    /// Phase 1 mock 鉴权：启动时自动 sign in 拿固定 token，后续所有 endpoint 才能过 requireAuth。
+    /// /api/auth/signInWithApple 后端只校验 body 是合法 JSON，body 内容随意。
+    /// 之后切真 Apple Sign In 时这里改成 ASAuthorizationAppleIDProvider 走真 flow。
+    private func signInIfNeeded() async {
+        if deps.client.sessionToken != nil { return }
+        do {
+            let resp: SignInResponseDTO = try await deps.client.call(
+                Endpoints.signInWithApple,
+                body: nil
+            )
+            deps.client.sessionToken = resp.sessionToken
+        } catch {
+            print("[RootView] signIn failed: \(error)")
         }
     }
 }
