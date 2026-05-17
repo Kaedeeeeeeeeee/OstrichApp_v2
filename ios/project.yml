@@ -16,13 +16,16 @@ settings:
     SWIFT_TREAT_WARNINGS_AS_ERRORS: "NO"
   configs:
     Debug:
-      # Simulator / CI 不需要签名
-      CODE_SIGN_IDENTITY: ""
-      CODE_SIGNING_REQUIRED: "NO"
-      CODE_SIGNING_ALLOWED: "NO"
-    Release:
-      # 真机 / TestFlight 用 Automatic，团队自填 DEVELOPMENT_TEAM
+      # Automatic 签名 + 用户 Apple Developer Team。Simulator 和真机都能跑。
+      # CI 跑 xcodebuild build 时用 CODE_SIGNING_ALLOWED=NO 覆盖
+      # （见 .github/workflows/ci-ios.yml）。
+      # 如团队成员换其他 Apple ID，临时改这里或用 xcconfig 覆盖。
       CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: Y4FV6WUU4V
+      CODE_SIGNING_ALLOWED: "YES"
+    Release:
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: Y4FV6WUU4V
       CODE_SIGNING_ALLOWED: "YES"
 
 targets:
