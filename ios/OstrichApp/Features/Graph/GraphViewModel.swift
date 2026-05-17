@@ -1,6 +1,10 @@
 // GraphViewModel.swift
-// 关系图谱状态：load → 拉 ConvexClient.graph → 失败 fallback mock。
+// 关系图谱状态：load → 拉 ConvexClient.graph → 失败时空图谱 + 错误文案。
 // INTERFACES.md §1.4 (graph endpoints) + §8 (轮询策略：进入时 1 次，不轮询)。
+//
+// 设计原则：关系图谱必须只展示真实数据。若用户尚未在传心室提到过任何人，
+// 后端会返回空 people 数组 — UI 应该是中心一个「我」+ 提示文案，
+// 绝不可以塞 demo 数据冒充。`demoFixture()` 仅供 SwiftUI Preview 与单测使用。
 
 import Foundation
 import SwiftUI
@@ -13,7 +17,6 @@ public final class GraphViewModel: ObservableObject {
     @Published public private(set) var graph: GraphResponseDTO?
     @Published public private(set) var isLoading = false
     @Published public private(set) var loadError: String?
-    @Published public private(set) var usedFallback = false
     @Published public var selectedPerson: PersonDTO?
 
     // MARK: - Deps
@@ -26,11 +29,11 @@ public final class GraphViewModel: ObservableObject {
 
     // MARK: - 加载
 
-    /// 拉 /api/graph。失败时把 fallback mock 注入 graph，errorMessage 留作 UI 提示。
+    /// 拉 /api/graph。失败时图谱归为空（仅显示中心「我」）+ loadError 给 UI 提示。
+    /// 不再注入 demo 数据冒充真实关系。
     public func load() async {
         isLoading = true
         loadError = nil
-        usedFallback = false
         defer { isLoading = false }
 
         do {
@@ -38,12 +41,10 @@ public final class GraphViewModel: ObservableObject {
             graph = response
         } catch let err as ConvexError {
             loadError = err.errorDescription
-            graph = Self.fallbackMock()
-            usedFallback = true
+            graph = GraphResponseDTO(people: [], edges: [])
         } catch {
             loadError = error.localizedDescription
-            graph = Self.fallbackMock()
-            usedFallback = true
+            graph = GraphResponseDTO(people: [], edges: [])
         }
     }
 
@@ -63,11 +64,11 @@ public final class GraphViewModel: ObservableObject {
         selectedPerson = nil
     }
 
-    // MARK: - Fallback mock
+    // MARK: - Demo fixture（仅 Preview + 单测）
 
-    /// 后端 503 / 404 时给 UI 一个看得到的图：自己 + 5 个常见角色 + 边。
-    /// DEMO_SCRIPT 02-03min 用到的妈妈 / 阿杰 等。
-    public static func fallbackMock() -> GraphResponseDTO {
+    /// 给 SwiftUI Preview 与单元测试做物理 / UI 验证用的固定 graph。
+    /// 生产 load() 流程**绝不**调用此 fixture — 真实图谱必须由后端 people 表驱动。
+    public static func demoFixture() -> GraphResponseDTO {
         let now = "2026-05-17T10:00:00Z"
         let people: [PersonDTO] = [
             PersonDTO(
@@ -79,7 +80,8 @@ public final class GraphViewModel: ObservableObject {
                 recentInteractionCount: 14,
                 notes: "最近聊得多，但你说有点窒息。",
                 hasOstrich: false,
-                lastMentionedAt: now
+                lastMentionedAt: now,
+                memoryWeight: 820
             ),
             PersonDTO(
                 id: "p_jie",
@@ -90,7 +92,8 @@ public final class GraphViewModel: ObservableObject {
                 recentInteractionCount: 6,
                 notes: "周末经常一起打球。",
                 hasOstrich: true,
-                lastMentionedAt: now
+                lastMentionedAt: now,
+                memoryWeight: 450
             ),
             PersonDTO(
                 id: "p_lin",
@@ -101,7 +104,8 @@ public final class GraphViewModel: ObservableObject {
                 recentInteractionCount: 3,
                 notes: "新项目的 PM。",
                 hasOstrich: false,
-                lastMentionedAt: now
+                lastMentionedAt: now,
+                memoryWeight: 180
             ),
             PersonDTO(
                 id: "p_sasa",
@@ -112,7 +116,8 @@ public final class GraphViewModel: ObservableObject {
                 recentInteractionCount: 2,
                 notes: "鸵鸟遛弯认识的音乐人。",
                 hasOstrich: true,
-                lastMentionedAt: now
+                lastMentionedAt: now,
+                memoryWeight: 220
             ),
             PersonDTO(
                 id: "p_x1",
@@ -123,7 +128,8 @@ public final class GraphViewModel: ObservableObject {
                 recentInteractionCount: 1,
                 notes: "提过一次，关系待定。",
                 hasOstrich: false,
-                lastMentionedAt: now
+                lastMentionedAt: now,
+                memoryWeight: 30
             )
         ]
         let edges: [EdgeDTO] = [
@@ -132,7 +138,6 @@ public final class GraphViewModel: ObservableObject {
             EdgeDTO(fromPersonId: GraphSelf.id, toPersonId: "p_lin", weight: 0.40),
             EdgeDTO(fromPersonId: GraphSelf.id, toPersonId: "p_sasa", weight: 0.30),
             EdgeDTO(fromPersonId: GraphSelf.id, toPersonId: "p_x1", weight: 0.20),
-            // 三角小连接
             EdgeDTO(fromPersonId: "p_jie", toPersonId: "p_sasa", weight: 0.25)
         ]
         return GraphResponseDTO(people: people, edges: edges)

@@ -1,5 +1,5 @@
 // GraphViewModelTests.swift
-// 验证 GraphViewModel 拉数据 / 错误 fallback / 节点选中 → sheet。
+// 验证 GraphViewModel 拉数据 / 失败时空图谱 + 错误 / 节点选中 → sheet。
 
 import Foundation
 import Testing
@@ -25,7 +25,6 @@ struct GraphViewModelTests {
             ]
         )
         mock.stub(path: Endpoints.graph + "?", response: response)
-        // MockConvexClient.get 拼 query 时若为空 → 直接用 path（无 ?）。
         mock.stub(path: Endpoints.graph, response: response)
 
         let vm = GraphViewModel(client: mock)
@@ -35,41 +34,50 @@ struct GraphViewModelTests {
         #expect(vm.graph?.people.count == 1)
         #expect(vm.graph?.edges.count == 1)
         #expect(vm.loadError == nil)
-        #expect(vm.usedFallback == false)
         #expect(vm.isLoading == false)
     }
 
-    // MARK: - load 失败 fallback
+    // MARK: - load 失败 → 空图谱（不再注入假数据）
 
-    @Test func loadFailureFallsBackToMock() async {
+    @Test func loadFailureLeavesEmptyGraphWithError() async {
         let mock = MockConvexClient()
         mock.stubError(path: Endpoints.graph, error: .claudeUnavailable)
 
         let vm = GraphViewModel(client: mock)
         await vm.load()
 
-        #expect(vm.usedFallback == true)
-        #expect(vm.graph != nil)
-        // fallback 至少有 self 之外的人
-        let names = vm.graph?.people.map(\.name) ?? []
-        #expect(names.contains("妈妈"))
+        #expect(vm.graph?.people.isEmpty == true)
+        #expect(vm.graph?.edges.isEmpty == true)
         #expect(vm.loadError != nil)
     }
 
-    @Test func loadFailureNotStubbedAlsoFallsBack() async {
+    @Test func loadFailureNotStubbedAlsoLeavesEmpty() async {
         let mock = MockConvexClient()
         // 完全没 stub → MockConvexClient 抛 internalError
         let vm = GraphViewModel(client: mock)
         await vm.load()
 
-        #expect(vm.usedFallback == true)
-        #expect(vm.graph?.people.isEmpty == false)
+        #expect(vm.graph?.people.isEmpty == true)
+        #expect(vm.loadError != nil)
     }
 
-    // MARK: - fallback mock 自带必要边
+    // MARK: - load 后端真返回空 → 空图谱无错误
 
-    @Test func fallbackMockHasEdgesFromSelf() {
-        let graph = GraphViewModel.fallbackMock()
+    @Test func loadEmptyBackendResponseHasNoError() async {
+        let mock = MockConvexClient()
+        mock.stub(path: Endpoints.graph, response: GraphResponseDTO(people: [], edges: []))
+
+        let vm = GraphViewModel(client: mock)
+        await vm.load()
+
+        #expect(vm.graph?.people.isEmpty == true)
+        #expect(vm.loadError == nil)
+    }
+
+    // MARK: - demo fixture（Preview / 物理单测用）
+
+    @Test func demoFixtureHasEdgesFromSelf() {
+        let graph = GraphViewModel.demoFixture()
         let fromSelf = graph.edges.filter { $0.fromPersonId == GraphSelf.id }
         #expect(fromSelf.isEmpty == false)
         // 自己到妈妈 / 阿杰 / 林姐 / 飒飒 / K 各至少 1 条

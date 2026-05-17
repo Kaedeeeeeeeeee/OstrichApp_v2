@@ -222,7 +222,7 @@ describe("tickAllOstriches", () => {
 // ─────────────────────────────────────────────────────────────
 
 describe("decideNextMove", () => {
-  it("Sonnet 返回结构化决策 → 写回 destination + walkingRoute + state=wandering", async () => {
+  it("Sonnet 返回结构化决策 → 写回 destination + walkingRoute + currentIntention", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
     mockCreate.mockResolvedValueOnce({
@@ -243,6 +243,13 @@ describe("decideNextMove", () => {
       userZodiac: "巨蟹座",
     })) as AwakenResult;
 
+    // decideNextMove 现在有 entry guard `state !== "wandering" → return`。
+    // 真实流程是 /api/wander/start 先把 state 切到 wandering，再触发 decideNextMove。
+    // 这里直接 patch 模拟这一步。
+    await t.run(async (ctx) => {
+      await ctx.db.patch(awaken.ostrichId, { state: "wandering" });
+    });
+
     await t.action(makeFunctionReference<"action">("wander:decideNextMove"), {
       ostrichId: awaken.ostrichId,
     });
@@ -253,6 +260,7 @@ describe("decideNextMove", () => {
         currentActivity: string;
         destination?: { lat: number; lng: number; eta: number };
         walkingRoute?: { polyline: number[][]; startedAt: number; expectedDuration: number };
+        currentIntention?: { destinationName: string; reason: string; decidedAt: number };
       } | null;
       expect(o!.state).toBe("wandering");
       expect(o!.currentActivity).toBe("walking");
@@ -260,11 +268,14 @@ describe("decideNextMove", () => {
       expect(o!.destination!.lng).toBeCloseTo(139.695, 3);
       expect(o!.walkingRoute!.polyline.length).toBeGreaterThanOrEqual(2);
       expect(o!.walkingRoute!.expectedDuration).toBeGreaterThan(0);
+      // 新行为：思考被存到 currentIntention，前端 mapLocal 会读它显示给用户
+      expect(o!.currentIntention!.destinationName).toBe("代代木公园");
+      expect(o!.currentIntention!.reason).toBe("想看看树");
     });
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("Sonnet 失败 → fallback 随机 POI 也写入", async () => {
+  it("Sonnet 失败 → fallback 随机 POI + fallback reason 也写入", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-test-key";
     mockCreate.mockRejectedValueOnce(new Error("API down"));
     vi.spyOn(Math, "random").mockReturnValue(0); // 选第一个候选
@@ -277,6 +288,10 @@ describe("decideNextMove", () => {
       userZodiac: "巨蟹座",
     })) as AwakenResult;
 
+    await t.run(async (ctx) => {
+      await ctx.db.patch(awaken.ostrichId, { state: "wandering" });
+    });
+
     await t.action(makeFunctionReference<"action">("wander:decideNextMove"), {
       ostrichId: awaken.ostrichId,
     });
@@ -285,9 +300,43 @@ describe("decideNextMove", () => {
       const o = (await ctx.db.get(awaken.ostrichId)) as {
         state: string;
         destination?: { lat: number; lng: number };
+        currentIntention?: { destinationName: string; reason: string };
       } | null;
       expect(o!.state).toBe("wandering");
       expect(o!.destination).toBeDefined();
+      // LLM 失败 fallback 时 reason 给 graceful 占位
+      expect(o!.currentIntention!.reason).toBe("想随便走走");
+      expect(o!.currentIntention!.destinationName).toBeTruthy();
     });
+  });
+
+  it("entry guard: state != wandering 直接 return，不写任何东西", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-test-key";
+
+    const t = makeT();
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+    })) as AwakenResult;
+    // 不切 state，保持 "awake"
+
+    await t.action(makeFunctionReference<"action">("wander:decideNextMove"), {
+      ostrichId: awaken.ostrichId,
+    });
+
+    await t.run(async (ctx) => {
+      const o = (await ctx.db.get(awaken.ostrichId)) as {
+        state: string;
+        destination?: unknown;
+        currentIntention?: unknown;
+      } | null;
+      expect(o!.state).toBe("awake");
+      expect(o!.destination).toBeUndefined();
+      expect(o!.currentIntention).toBeUndefined();
+    });
+    // LLM 没被调用
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });

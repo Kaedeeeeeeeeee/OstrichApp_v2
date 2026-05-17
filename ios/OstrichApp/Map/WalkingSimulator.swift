@@ -42,7 +42,7 @@ public final class WalkingSimulator: ObservableObject {
         route: [CLLocationCoordinate2D],
         startedAt: Date,
         expectedDuration: TimeInterval,
-        tickInterval: TimeInterval = 2.0,
+        tickInterval: TimeInterval = 0.1,
         clock: @escaping () -> Date = { Date() }
     ) {
         precondition(!route.isEmpty, "route 不能为空")

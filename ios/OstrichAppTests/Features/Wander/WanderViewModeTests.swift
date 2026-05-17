@@ -26,14 +26,20 @@ struct WanderViewModeTests {
     }
 
     @Test func godViewInstantiates() {
-        let client = MockConvexClient()
-        let view = GodViewView(client: client, onRecall: {})
+        let view = GodViewView(ostrichCount: 0, onRecall: {})
         _ = view.body
     }
 
     @Test func localViewInstantiates() {
-        let client = MockConvexClient()
-        let view = LocalViewView(client: client, onBackToGod: {})
+        let view = LocalViewView(
+            speechText: "",
+            activityLabel: "",
+            inFlightAction: false,
+            onBackToGod: {},
+            onCallHome: {},
+            onAllowToStay: {},
+            onLookAround: {}
+        )
         _ = view.body
     }
 }

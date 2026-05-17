@@ -46,7 +46,7 @@ struct ForceLayoutTests {
 
     @Test func loadInsertsSelfNodeAtCenter() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let size = CGSize(width: 360, height: 600)
         layout.load(graph: graph, in: size)
 
@@ -87,7 +87,7 @@ struct ForceLayoutTests {
     @Test func smallGraphStabilizesAfter300Steps() {
         // 5 个真实节点 + self；100+ step 后速度应明显收敛。
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let bounds = CGRect(x: 0, y: 0, width: 360, height: 600)
         layout.load(graph: graph, in: bounds.size)
 
@@ -101,7 +101,7 @@ struct ForceLayoutTests {
 
     @Test func nodesStayInsideBounds() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let bounds = CGRect(x: 0, y: 0, width: 300, height: 500)
         layout.load(graph: graph, in: bounds.size)
 
@@ -119,7 +119,7 @@ struct ForceLayoutTests {
 
     @Test func selfNodeStaysPinnedAtCenter() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let bounds = CGRect(x: 0, y: 0, width: 400, height: 600)
         layout.load(graph: graph, in: bounds.size)
 
@@ -136,7 +136,7 @@ struct ForceLayoutTests {
 
     @Test func hitTestFindsClosestNode() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let bounds = CGRect(x: 0, y: 0, width: 400, height: 600)
         layout.load(graph: graph, in: bounds.size)
 
@@ -150,7 +150,7 @@ struct ForceLayoutTests {
 
     @Test func hitTestReturnsNilFarFromNodes() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         layout.load(graph: graph, in: CGSize(width: 400, height: 600))
 
         // (-9999, -9999) 离所有节点都远
@@ -160,7 +160,7 @@ struct ForceLayoutTests {
 
     @Test func pinKeepsNodeAtFixedPosition() {
         let layout = ForceLayout()
-        let graph = GraphViewModel.fallbackMock()
+        let graph = GraphViewModel.demoFixture()
         let bounds = CGRect(x: 0, y: 0, width: 400, height: 600)
         layout.load(graph: graph, in: bounds.size)
 

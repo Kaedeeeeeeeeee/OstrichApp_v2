@@ -41,44 +41,96 @@ function hasAppleMapsEnv(): boolean {
  * 用 q 为通用关键词（覆盖咖啡、餐厅、公园、商店）；searchLocation 限定中心；
  * searchRegion 用半径换算到经纬度上下界。
  */
+/**
+ * 多类别关键词。每个独立调一次 /v1/search 然后合并去重。
+ *
+ * 为什么不一次性 q="shops cafes parks restaurants"：
+ *   Apple Maps `q` 当 free-text 短语解析，会偏向命中最具体的词。
+ *   实测涩谷站 5km 内返回 12 个结果，11 个 Cafe + 1 个 Restaurant，
+ *   完全淹没商店 / 公园 / 便利店 / 书店 / 面包店等。
+ *   分类别并发调用是 Apple Maps Server API 文档里唯一能保证多样性的做法
+ *   （client SDK 的 pointOfInterestCategoryFilter Server API 不支持）。
+ *
+ * 关键词覆盖 BLUEPRINT §10 + 鸵鸟世界观里能出现的所有 stop 类型。
+ * 每类别取前 4 个，理论上限 4 × N keywords ≈ 28 个 POI 给 LLM 选择。
+ */
+const POI_CATEGORY_QUERIES: ReadonlyArray<string> = [
+  "cafe",
+  "restaurant",
+  "park",
+  "convenience store",
+  "shop",
+  "bookstore",
+  "bakery",
+];
+const PER_CATEGORY_LIMIT = 4;
+
 export async function searchNearby(lat: number, lng: number, radius_m: number): Promise<POI[]> {
   if (!hasAppleMapsEnv()) {
     return searchNearbyStub(lat, lng, radius_m);
   }
   try {
     const token = await getAccessToken();
-    const url = new URL(`${BASE}/v1/search`);
-    url.searchParams.set("q", "shops cafes parks restaurants");
-    url.searchParams.set("searchLocation", `${lat},${lng}`);
     // 半径转 deg 估算（粗略，1 deg lat ≈ 111 km）
     const deg = radius_m / 111_000;
-    url.searchParams.set("searchRegion", `${lat - deg},${lng - deg},${lat + deg},${lng + deg}`);
-    url.searchParams.set("resultTypeFilter", "Poi");
-    url.searchParams.set("limitToCountries", "JP");
+    // Apple Maps Server API · searchRegion 格式：
+    //   "northLat,eastLng,southLat,westLng"（右上角 + 左下角）
+    //   官方示例 "38,-122.1,37.5,-122.5"
+    // searchRegion 和 searchLocation 互斥（同时传会 400）；保留 region 更精确。
+    const searchRegion = `${lat + deg},${lng + deg},${lat - deg},${lng - deg}`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      throw new Error(`Apple Maps search failed: ${res.status}`);
-    }
-    const data = (await res.json()) as { results?: AppleSearchResult[] };
-    const out: POI[] = [];
-    for (const r of data.results ?? []) {
-      const coord = r.coordinate;
-      if (!coord) continue;
-      const id = r.muid ?? r.id ?? `poi-${coord.latitude.toFixed(5)},${coord.longitude.toFixed(5)}`;
-      const name = r.name ?? r.formattedAddressLines?.[0] ?? "(unknown)";
-      out.push({
-        id,
-        name,
-        category: r.poiCategory ?? "place",
-        lat: coord.latitude,
-        lng: coord.longitude,
+    const fetchOne = async (q: string): Promise<POI[]> => {
+      const url = new URL(`${BASE}/v1/search`);
+      url.searchParams.set("q", q);
+      url.searchParams.set("searchRegion", searchRegion);
+      url.searchParams.set("resultTypeFilter", "Poi");
+      url.searchParams.set("limitToCountries", "JP");
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (out.length >= 12) break;
+      if (!res.ok) {
+        const body = await res.text().catch(() => "<no body>");
+        throw new Error(
+          `Apple Maps search failed: ${res.status} q=${q} body=${body.slice(0, 200)}`,
+        );
+      }
+      const data = (await res.json()) as { results?: AppleSearchResult[] };
+      const out: POI[] = [];
+      for (const r of data.results ?? []) {
+        const coord = r.coordinate;
+        if (!coord) continue;
+        const id = r.muid ?? r.id ?? `poi-${coord.latitude.toFixed(5)},${coord.longitude.toFixed(5)}`;
+        const name = r.name ?? r.formattedAddressLines?.[0] ?? "(unknown)";
+        out.push({
+          id,
+          name,
+          category: r.poiCategory ?? "place",
+          lat: coord.latitude,
+          lng: coord.longitude,
+        });
+        if (out.length >= PER_CATEGORY_LIMIT) break;
+      }
+      return out;
+    };
+
+    // 并发拉所有类别。单个失败不阻塞别人。
+    const results = await Promise.allSettled(POI_CATEGORY_QUERIES.map((q) => fetchOne(q)));
+    const seen = new Set<string>();
+    const merged: POI[] = [];
+    for (const r of results) {
+      if (r.status !== "fulfilled") continue;
+      for (const poi of r.value) {
+        if (seen.has(poi.id)) continue;
+        seen.add(poi.id);
+        merged.push(poi);
+      }
     }
-    return out;
+    if (merged.length === 0) {
+      // 全失败 → 降级到 stub，避免给 LLM 空列表
+      console.warn("[mapPoi] all per-category searches failed → fallback to stub");
+      return searchNearbyStub(lat, lng, radius_m);
+    }
+    return merged;
   } catch (err) {
     console.warn("[mapPoi] searchNearby fell back to stub:", err);
     return searchNearbyStub(lat, lng, radius_m);

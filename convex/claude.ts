@@ -2,7 +2,7 @@
 // 调用入口：`chat`（internalAction），由 `chat.ts::sendMessage` 触发。
 //
 // Provider 抽象（ADR-007）：
-//   LLM_PROVIDER=anthropic (默认) → Anthropic SDK，model=claude-sonnet-4-7
+//   LLM_PROVIDER=anthropic (默认) → Anthropic SDK，model=claude-sonnet-4-6
 //   LLM_PROVIDER=deepseek         → OpenAI SDK，baseURL=api.deepseek.com/v1, model=deepseek-chat
 //
 // 工具 schema (`ostrichTools`) 以 Anthropic 格式作为 source of truth，
@@ -26,8 +26,9 @@ import { buildSystemPrompt } from "./lib/prompts";
 type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 type ActionCtx = GenericActionCtx<DataModel>;
 
-// model id 严格按 BLUEPRINT §1
-const SONNET_MODEL = "claude-sonnet-4-7";
+// model id：BLUEPRINT §1 写的是 sonnet 4.7，但 Anthropic API 实际最新只到 4.6，
+// 用 4.7 会被 API 拒绝 "model not found"。等 4.7 上线时再升。
+const SONNET_MODEL = "claude-sonnet-4-6";
 // DeepSeek V3.x，支持 tool calling
 const DEEPSEEK_MODEL = "deepseek-chat";
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
