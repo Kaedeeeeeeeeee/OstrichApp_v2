@@ -9,6 +9,8 @@ struct MainTabView: View {
     @EnvironmentObject private var deps: AppDependency
     @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
     @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
+    /// 主传心室 id（chat_rooms 表）。Step9 onboarding 完写入。
+    @AppStorage("mainRoomId") private var mainRoomId: String = ""
 
     init() {
         // 给 TabBar 设浅奶油色底，避免默认半透明灰。
@@ -52,9 +54,12 @@ struct MainTabView: View {
     // MARK: - Chat tab
 
     /// roomId 为空（onboarding 还没存）时退化为占位提示。
+    /// 注意：传给 ChatView 的是 chat_rooms.id，不是 ostriches.id。
+    /// 老用户可能 @AppStorage 里只有 mainOstrichId（来自 #31 旧版），
+    /// 缺 mainRoomId 时也走占位 — 实际 demo 时新装的 app 已经会写两个。
     @ViewBuilder
     private var chatTab: some View {
-        if mainOstrichId.isEmpty {
+        if mainRoomId.isEmpty {
             PlaceholderView(
                 title: "传心",
                 subtitle: "先完成 onboarding，鸵鸟才能听见你"
@@ -62,7 +67,7 @@ struct MainTabView: View {
         } else {
             ChatView(
                 client: deps.client,
-                roomId: mainOstrichId,
+                roomId: mainRoomId,
                 ostrichName: mainOstrichName.isEmpty ? "鸵鸟" : mainOstrichName
             )
         }

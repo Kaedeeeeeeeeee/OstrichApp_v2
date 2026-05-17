@@ -37,6 +37,8 @@ public struct OstrichDTO: Codable, Equatable {
     public let currentLocation: LocationDTO
     public let currentActivity: String
     public let daysTogether: Int
+    /// 仅 /api/awaken 返回 — 主传心室 id。其他 endpoint 返回 OstrichDTO 时为 nil。
+    public let mainRoomId: String?
 
     public init(
         id: String,
@@ -48,7 +50,8 @@ public struct OstrichDTO: Codable, Equatable {
         state: String,
         currentLocation: LocationDTO,
         currentActivity: String,
-        daysTogether: Int
+        daysTogether: Int,
+        mainRoomId: String? = nil
     ) {
         self.id = id
         self.ownerId = ownerId
@@ -60,6 +63,7 @@ public struct OstrichDTO: Codable, Equatable {
         self.currentLocation = currentLocation
         self.currentActivity = currentActivity
         self.daysTogether = daysTogether
+        self.mainRoomId = mainRoomId
     }
 }
 

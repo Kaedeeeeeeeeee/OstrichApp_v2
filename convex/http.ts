@@ -532,13 +532,23 @@ http.route({
             userZodiac: body.userZodiac,
             userName: body.userName,
           } as never,
-        )) as { ostrichId: Id<"ostriches"> };
+        )) as {
+          ostrichId: Id<"ostriches">;
+          mainRoomId: Id<"chat_rooms">;
+          firstMessageId: Id<"messages">;
+        };
         const ostrich = (await ctx.runQuery(
           makeFunctionReference<"query">("http:_getOstrichById") as never,
           { ostrichId: result.ostrichId } as never,
         )) as OstrichRow | null;
         if (!ostrich) throw new HttpError("INTERNAL", "Ostrich missing after awaken");
-        return okResponse(toOstrichDTO(ostrich));
+        // 把鸵鸟资料 + 主传心室 id + 首条 message id 一起回给客户端，让 Onboarding
+        // 把 mainRoomId 存到 @AppStorage，之后 ChatView 用它作 roomId。
+        return okResponse({
+          ...toOstrichDTO(ostrich),
+          mainRoomId: result.mainRoomId,
+          firstMessageId: result.firstMessageId,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (/Invalid eggType/i.test(message)) {
