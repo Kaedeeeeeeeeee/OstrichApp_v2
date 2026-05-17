@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 
 export default function setup(): void {
   const here = dirname(fileURLToPath(import.meta.url));
-  const generatedDir = join(here, "..", "_generated");
+  // tests/convex/ → ../../convex/_generated/
+  const generatedDir = join(here, "..", "..", "convex", "_generated");
   if (!existsSync(generatedDir)) {
     mkdirSync(generatedDir, { recursive: true });
   }
@@ -20,7 +21,7 @@ export default function setup(): void {
   if (!existsSync(apiStub)) {
     writeFileSync(
       apiStub,
-      `// Auto-generated stub for convex-test (see convex/_test/global-setup.ts).
+      `// Auto-generated stub for convex-test (see tests/convex/global-setup.ts).
 // Real _generated/api.js is created by \`npx convex codegen\`.
 export const api = {};
 export const internal = {};

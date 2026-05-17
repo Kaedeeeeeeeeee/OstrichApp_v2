@@ -8,7 +8,7 @@ import { convexTest } from "convex-test";
 import { makeFunctionReference } from "convex/server";
 import type { GenericId as Id } from "convex/values";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import schema from "../schema";
+import schema from "../../convex/schema";
 
 declare global {
   interface ImportMeta {
@@ -37,7 +37,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   };
 });
 
-const modules = import.meta.glob("../**/*.{ts,js}");
+const modules = import.meta.glob("../../convex/**/*.{ts,js}");
 
 function makeT() {
   return convexTest(schema, modules);

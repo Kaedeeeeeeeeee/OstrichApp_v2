@@ -112,19 +112,19 @@ afterAll(() => {
 
 describe("decodePrivateKey", () => {
   it("原始 PEM 直接返回", async () => {
-    const { decodePrivateKey } = await import("../lib/mapsJwt");
+    const { decodePrivateKey } = await import("../../convex/lib/mapsJwt");
     expect(decodePrivateKey(testPemPKCS8)).toBe(testPemPKCS8);
   });
 
   it("base64(PEM) 解码后返回 PEM", async () => {
-    const { decodePrivateKey } = await import("../lib/mapsJwt");
+    const { decodePrivateKey } = await import("../../convex/lib/mapsJwt");
     const b64 = Buffer.from(testPemPKCS8, "utf-8").toString("base64");
     const out = decodePrivateKey(b64);
     expect(out).toContain("BEGIN PRIVATE KEY");
   });
 
   it("两种格式都不是 → throw", async () => {
-    const { decodePrivateKey } = await import("../lib/mapsJwt");
+    const { decodePrivateKey } = await import("../../convex/lib/mapsJwt");
     expect(() => decodePrivateKey("not-a-key")).toThrow(/PEM/);
   });
 });
@@ -135,7 +135,8 @@ describe("decodePrivateKey", () => {
 
 describe("getAccessToken caching", () => {
   it("连续调用只换一次 token", async () => {
-    const { getAccessToken, _resetAccessTokenCacheForTest } = await import("../lib/mapsJwt");
+    const { getAccessToken, _resetAccessTokenCacheForTest } =
+      await import("../../convex/lib/mapsJwt");
     _resetAccessTokenCacheForTest();
     tokenExchangeHits = 0;
 
@@ -154,7 +155,8 @@ describe("getAccessToken caching", () => {
         return new HttpResponse(null, { status: 401, statusText: "Unauthorized" });
       }),
     );
-    const { getAccessToken, _resetAccessTokenCacheForTest } = await import("../lib/mapsJwt");
+    const { getAccessToken, _resetAccessTokenCacheForTest } =
+      await import("../../convex/lib/mapsJwt");
     _resetAccessTokenCacheForTest();
     await expect(getAccessToken()).rejects.toThrow(/token exchange failed/);
   });
@@ -166,12 +168,12 @@ describe("getAccessToken caching", () => {
 
 describe("searchNearby", () => {
   beforeEach(async () => {
-    const { _resetAccessTokenCacheForTest } = await import("../lib/mapsJwt");
+    const { _resetAccessTokenCacheForTest } = await import("../../convex/lib/mapsJwt");
     _resetAccessTokenCacheForTest();
   });
 
   it("把 Apple results 映射到 POI[]", async () => {
-    const { searchNearby } = await import("../lib/mapPoi");
+    const { searchNearby } = await import("../../convex/lib/mapPoi");
     const pois = await searchNearby(35.66, 139.7, 1000);
     expect(pois.length).toBe(2);
     expect(pois[0]).toEqual({
@@ -189,7 +191,7 @@ describe("searchNearby", () => {
     server.use(
       http.get("https://maps-api.apple.com/v1/search", () => HttpResponse.json({ results: [] })),
     );
-    const { searchNearby } = await import("../lib/mapPoi");
+    const { searchNearby } = await import("../../convex/lib/mapPoi");
     const pois = await searchNearby(35.66, 139.7, 1000);
     expect(pois).toEqual([]);
   });
@@ -200,7 +202,7 @@ describe("searchNearby", () => {
         HttpResponse.json({}, { status: 500 }),
       ),
     );
-    const { searchNearby } = await import("../lib/mapPoi");
+    const { searchNearby } = await import("../../convex/lib/mapPoi");
     // stub 返回涩谷预定义 POI，所以坐标周围 5000m 内一定有结果
     const pois = await searchNearby(35.66, 139.7, 5000);
     expect(pois.length).toBeGreaterThan(0);
@@ -211,7 +213,7 @@ describe("searchNearby", () => {
     delete process.env.APPLE_MAPS_KEY_ID;
     try {
       tokenExchangeHits = 0;
-      const { searchNearby } = await import("../lib/mapPoi");
+      const { searchNearby } = await import("../../convex/lib/mapPoi");
       const pois = await searchNearby(35.66, 139.7, 5000);
       expect(pois.length).toBeGreaterThan(0);
       expect(tokenExchangeHits).toBe(0);
@@ -227,12 +229,12 @@ describe("searchNearby", () => {
 
 describe("walkingRoute", () => {
   beforeEach(async () => {
-    const { _resetAccessTokenCacheForTest } = await import("../lib/mapsJwt");
+    const { _resetAccessTokenCacheForTest } = await import("../../convex/lib/mapsJwt");
     _resetAccessTokenCacheForTest();
   });
 
   it("从 stepPaths 拼 polyline + 取 durationSeconds", async () => {
-    const { walkingRoute } = await import("../lib/mapPoi");
+    const { walkingRoute } = await import("../../convex/lib/mapPoi");
     const route = await walkingRoute({ lat: 35.66, lng: 139.7 }, { lat: 35.6716, lng: 139.695 });
     expect(route.polyline.length).toBe(4);
     expect(route.polyline[0]).toEqual([35.66, 139.7]);
@@ -246,7 +248,7 @@ describe("walkingRoute", () => {
         HttpResponse.json({ routes: [], stepPaths: [] }),
       ),
     );
-    const { walkingRoute } = await import("../lib/mapPoi");
+    const { walkingRoute } = await import("../../convex/lib/mapPoi");
     const route = await walkingRoute({ lat: 35.66, lng: 139.7 }, { lat: 35.67, lng: 139.71 });
     expect(route.polyline.length).toBeGreaterThanOrEqual(2);
     expect(route.expectedDurationSec).toBeGreaterThan(0);
@@ -259,12 +261,12 @@ describe("walkingRoute", () => {
 
 describe("geocode", () => {
   beforeEach(async () => {
-    const { _resetAccessTokenCacheForTest } = await import("../lib/mapsJwt");
+    const { _resetAccessTokenCacheForTest } = await import("../../convex/lib/mapsJwt");
     _resetAccessTokenCacheForTest();
   });
 
   it("优先用 structuredAddress.locality", async () => {
-    const { geocode } = await import("../lib/mapPoi");
+    const { geocode } = await import("../../convex/lib/mapPoi");
     expect(await geocode(35.66, 139.7)).toBe("涩谷区");
   });
 
@@ -276,7 +278,7 @@ describe("geocode", () => {
         }),
       ),
     );
-    const { geocode } = await import("../lib/mapPoi");
+    const { geocode } = await import("../../convex/lib/mapPoi");
     expect(await geocode(35.66, 139.7)).toBe("仅一行地址");
   });
 
@@ -286,7 +288,7 @@ describe("geocode", () => {
         HttpResponse.json({ results: [] }),
       ),
     );
-    const { geocode } = await import("../lib/mapPoi");
+    const { geocode } = await import("../../convex/lib/mapPoi");
     const out = await geocode(35.66, 139.7);
     expect(out).toMatch(/^35\.\d+,139\.\d+$/);
   });
@@ -298,7 +300,7 @@ describe("geocode", () => {
 
 describe("cellIdOf", () => {
   it("lat/lng 各保留 3 位小数", async () => {
-    const { cellIdOf } = await import("../lib/mapPoi");
+    const { cellIdOf } = await import("../../convex/lib/mapPoi");
     expect(cellIdOf(35.6598, 139.70124)).toBe("35.660:139.701");
   });
 });
