@@ -136,10 +136,15 @@ public struct LiquidOstrichHeadView: View {
                     Self.wobblePoint(p, t: t * 0.55, amp: headAmp)
                 }
 
-                // 头部 clip：viewBox y < 480 范围（v4 用 height=360 in head-local AI coords，
-                // 头部 path y 范围 ~245..475，所以 clip rect 取 viewBox 全宽 + y∈[0, 480]）
+                // 头部 clip：准确复刻 v4 HTML 的 headClip
+                // (`<rect x="0" y="0" width="595" height="360"/>`)。
+                // 在 head group 平移后的坐标系内，保留 y ≤ 360 的区域，
+                // 砍掉 HEAD path 底部的"肩膀/翅膀状"延伸（v4 SVG 设计里这部分
+                // 由 body/procedural neck 视觉覆盖，但我们用程序化 bezier neck
+                // 时会裸露出来）。x 范围用 0..595 全宽保险，反正 HEAD path
+                // x ∈ [245, 350] 都在内。
                 var headClipCtx = headCtx
-                headClipCtx.clip(to: Path(CGRect(x: 125, y: 135, width: 330, height: 345)))
+                headClipCtx.clip(to: Path(CGRect(x: 0, y: 0, width: 595, height: 360)))
                 headClipCtx.fill(Path(headPath), with: .color(OstrichColor.orange))
 
                 // 滴液（独立 wobble，不 clip）
