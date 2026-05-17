@@ -89,54 +89,58 @@ public struct EggArchetype: Identifiable, Equatable {
 
 public enum EggCatalog {
     /// 与 shared/eggs/ 文件名顺序一致（eggId 01..16）。
+    /// 颜色按 archetype 性格调性选，覆盖红/橙/黄/绿/蓝/紫/灰/棕 8 个色相，
+    /// 相邻两蛋色相差距足够大，盲盒陈列时一眼能区分。
+    /// 选中态描边走 ink，所以 primary 都避开纯黑。
     public static let all: [EggArchetype] = [
         EggArchetype(eggType: 1, archetype: "STEADFAST", displayName: "守望者",
-                     primary: OstrichColors.cream, secondary: OstrichColors.creamDeep),
+                     primary: Color(red: 0.29, green: 0.34, blue: 0.46),   // 深蓝灰
+                     secondary: Color(red: 0.78, green: 0.82, blue: 0.87)), // 雾银
         EggArchetype(eggType: 2, archetype: "POET", displayName: "诗人",
-                     primary: OstrichColors.orange.opacity(0.85),
-                     secondary: OstrichColors.orangeDeep),
+                     primary: Color(red: 0.61, green: 0.48, blue: 0.72),   // 薰衣紫
+                     secondary: Color(red: 0.86, green: 0.78, blue: 0.91)), // 浅紫
         EggArchetype(eggType: 3, archetype: "STRAIGHTSHOOTER", displayName: "直心客",
-                     primary: OstrichColors.orange,
-                     secondary: OstrichColors.cream),
+                     primary: Color(red: 0.85, green: 0.33, blue: 0.31),   // 朱砂红
+                     secondary: Color(red: 0.97, green: 0.89, blue: 0.76)), // 奶
         EggArchetype(eggType: 4, archetype: "CUDDLER", displayName: "甜心",
-                     primary: OstrichColors.cream,
-                     secondary: OstrichColors.orange.opacity(0.6)),
+                     primary: Color(red: 0.95, green: 0.65, blue: 0.75),   // 樱花粉
+                     secondary: Color(red: 1.00, green: 0.85, blue: 0.75)), // 蜜桃
         EggArchetype(eggType: 5, archetype: "WORLDLY", displayName: "老炮儿",
-                     primary: OstrichColors.creamDeep,
-                     secondary: OstrichColors.ink.opacity(0.7)),
+                     primary: Color(red: 0.55, green: 0.44, blue: 0.30),   // 烟褐
+                     secondary: Color(red: 0.83, green: 0.71, blue: 0.50)), // 沙金
         EggArchetype(eggType: 6, archetype: "MAVERICK", displayName: "鬼才",
-                     primary: OstrichColors.orangeDeep,
-                     secondary: OstrichColors.cream),
+                     primary: Color(red: 0.91, green: 0.83, blue: 0.23),   // 电柠檬黄
+                     secondary: Color(red: 0.15, green: 0.15, blue: 0.18)), // 墨黑
         EggArchetype(eggType: 7, archetype: "STOIC", displayName: "冷哲",
-                     primary: OstrichColors.ink.opacity(0.55),
-                     secondary: OstrichColors.creamDeep),
+                     primary: Color(red: 0.44, green: 0.48, blue: 0.52),   // 钢冷灰
+                     secondary: Color(red: 0.93, green: 0.94, blue: 0.96)), // 雪白
         EggArchetype(eggType: 8, archetype: "WATCHER", displayName: "观察者",
-                     primary: OstrichColors.creamDeep,
-                     secondary: OstrichColors.ink.opacity(0.4)),
+                     primary: Color(red: 0.36, green: 0.50, blue: 0.35),   // 苔森绿
+                     secondary: Color(red: 0.75, green: 0.85, blue: 0.65)), // 嫩绿
         EggArchetype(eggType: 9, archetype: "HEDONIST", displayName: "美食家",
-                     primary: OstrichColors.orange,
-                     secondary: OstrichColors.creamDeep),
+                     primary: Color(red: 0.88, green: 0.64, blue: 0.23),   // 蜂蜜金
+                     secondary: Color(red: 0.95, green: 0.78, blue: 0.40)), // 橙金
         EggArchetype(eggType: 10, archetype: "INNOCENT", displayName: "童心",
-                     primary: OstrichColors.cream,
-                     secondary: OstrichColors.orange.opacity(0.45)),
+                     primary: Color(red: 0.48, green: 0.72, blue: 0.90),   // 晴空蓝
+                     secondary: Color(red: 0.92, green: 0.96, blue: 0.99)), // 云白
         EggArchetype(eggType: 11, archetype: "PROTECTOR", displayName: "仗义客",
-                     primary: OstrichColors.orangeDeep,
-                     secondary: OstrichColors.creamDeep),
+                     primary: Color(red: 0.42, green: 0.48, blue: 0.24),   // 橄榄军绿
+                     secondary: Color(red: 0.78, green: 0.74, blue: 0.50)), // 卡其
         EggArchetype(eggType: 12, archetype: "ELDER", displayName: "长者",
-                     primary: OstrichColors.creamDeep,
-                     secondary: OstrichColors.orangeDeep.opacity(0.7)),
+                     primary: Color(red: 0.55, green: 0.42, blue: 0.30),   // 老茶棕
+                     secondary: Color(red: 0.92, green: 0.85, blue: 0.72)), // 米杏
         EggArchetype(eggType: 13, archetype: "MYSTIC", displayName: "玄学家",
-                     primary: OstrichColors.ink.opacity(0.45),
-                     secondary: OstrichColors.cream),
+                     primary: Color(red: 0.37, green: 0.24, blue: 0.61),   // 靛紫
+                     secondary: Color(red: 0.85, green: 0.78, blue: 0.95)), // 星辉
         EggArchetype(eggType: 14, archetype: "RATIONALIST", displayName: "工程师",
-                     primary: OstrichColors.cream,
-                     secondary: OstrichColors.ink.opacity(0.55)),
+                     primary: Color(red: 0.30, green: 0.49, blue: 0.69),   // 钢蓝
+                     secondary: Color(red: 0.78, green: 0.85, blue: 0.92)), // 银
         EggArchetype(eggType: 15, archetype: "NIGHTOWL", displayName: "守夜人",
-                     primary: OstrichColors.ink.opacity(0.6),
-                     secondary: OstrichColors.orange),
+                     primary: Color(red: 0.16, green: 0.23, blue: 0.36),   // 午夜蓝
+                     secondary: Color(red: 0.96, green: 0.86, blue: 0.45)), // 星黄
         EggArchetype(eggType: 16, archetype: "SUNSHINE", displayName: "乐天派",
-                     primary: OstrichColors.orange,
-                     secondary: OstrichColors.cream)
+                     primary: Color(red: 0.96, green: 0.63, blue: 0.25),   // 暖橙
+                     secondary: Color(red: 1.00, green: 0.87, blue: 0.50)) // 阳光黄
     ]
 }
 
