@@ -68,11 +68,16 @@ struct Step5OstrichNameView: View {
     }
 }
 
+@MainActor
+private func _previewCoordinator() -> OnboardingCoordinator {
+    let c = OnboardingCoordinator(client: MockConvexClient())
+    c.userName = "诗枫"
+    return c
+}
+
 #Preview {
     ZStack {
         OstrichColors.bodyBackground.ignoresSafeArea()
-        let c = OnboardingCoordinator(client: MockConvexClient())
-        _ = (c.userName = "诗枫")
-        Step5OstrichNameView(coordinator: c)
+        Step5OstrichNameView(coordinator: _previewCoordinator())
     }
 }
