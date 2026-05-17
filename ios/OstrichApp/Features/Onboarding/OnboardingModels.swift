@@ -7,16 +7,24 @@ import SwiftUI
 
 // MARK: - Step
 
+/// Onboarding 流程顺序（demo 试跑后调整）：
+/// 1. 欢迎（液态鸵鸟 hero + "唤醒" CTA）
+/// 2. 选蛋盲盒
+/// 3. 破壳 — 鸵鸟出现
+/// 4. 鸵鸟问"你叫什么名字"，用户输入自己名字
+/// 5. 用户给鸵鸟起名字（"我叫你 XX"）
+/// 6. MBTI 选择
+/// 7. 星座选择
+/// 8. 唤醒（调 /api/awaken）+ 直接跳 Chat
 public enum OnboardingStep: Int, CaseIterable, Equatable {
     case welcome = 1
-    case mbti
-    case zodiac
     case eggBlindBox
     case eggHatch
-    case firstChat
-    case nameInput
-    case ostrichResponds
-    case finish
+    case userNameAsk
+    case ostrichNameInput
+    case mbti
+    case zodiac
+    case awakening
 }
 
 // MARK: - MBTI
@@ -140,12 +148,21 @@ public struct AwakenRequest: Encodable {
     public let name: String
     public let userMbti: String
     public let userZodiac: String
+    /// 新流程在 Step4 收集用户自己的名字，后端可选用。
+    public let userName: String?
 
-    public init(eggType: Int, name: String, userMbti: String, userZodiac: String) {
+    public init(
+        eggType: Int,
+        name: String,
+        userMbti: String,
+        userZodiac: String,
+        userName: String? = nil
+    ) {
         self.eggType = eggType
         self.name = name
         self.userMbti = userMbti
         self.userZodiac = userZodiac
+        self.userName = userName
     }
 }
 

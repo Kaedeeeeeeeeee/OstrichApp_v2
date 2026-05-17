@@ -25,11 +25,16 @@ struct MainTabView: View {
     @EnvironmentObject private var deps: AppDependency
     @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
     @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
-    /// 主传心室 id（chat_rooms 表）。Step9 onboarding 完写入。
+    /// 主传心室 id（chat_rooms 表）。Onboarding 完写入。
     @AppStorage("mainRoomId") private var mainRoomId: String = ""
+    /// RootView 在 onboarding 完成时置 true → MainTabView 立刻 push Chat → 用完清空。
+    @AppStorage("autoOpenChatOnLaunch") private var autoOpenChatOnLaunch = false
+
+    /// NavigationStack 路径状态。
+    @State private var path: [HomeRoute] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             HomeView()
                 .navigationDestination(for: HomeRoute.self) { route in
                     destination(for: route)
@@ -37,6 +42,13 @@ struct MainTabView: View {
                 }
         }
         .tint(OstrichColors.orange)
+        .task {
+            // Onboarding 完成后第一次进 main：直接打开传心。
+            if autoOpenChatOnLaunch {
+                autoOpenChatOnLaunch = false
+                path = [.chat]
+            }
+        }
     }
 
     @ViewBuilder

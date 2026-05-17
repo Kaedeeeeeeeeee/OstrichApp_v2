@@ -11,6 +11,11 @@ public enum LaunchPhase: Equatable {
 struct RootView: View {
     @State private var phase: LaunchPhase = .splash
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
+    @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
+    @AppStorage("mainRoomId") private var mainRoomId: String = ""
+    /// 刚完成 onboarding 时置 true，MainTabView 看到后立即 push 到 Chat。
+    @AppStorage("autoOpenChatOnLaunch") private var autoOpenChatOnLaunch = false
     @EnvironmentObject private var deps: AppDependency
 
     var body: some View {
@@ -22,7 +27,17 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             case .onboarding:
-                OnboardingFlow(client: deps.client) {
+                OnboardingFlow(client: deps.client) { ostrichDTO in
+                    // 持久化 awaken 拿到的 ids（即便 awaken 失败也标完成，
+                    // 让用户进 main，Chat tab 占位提示）。
+                    if let dto = ostrichDTO {
+                        mainOstrichId = dto.id
+                        mainOstrichName = dto.name.isEmpty ? "鸵鸟" : dto.name
+                        if let roomId = dto.mainRoomId, !roomId.isEmpty {
+                            mainRoomId = roomId
+                        }
+                    }
+                    autoOpenChatOnLaunch = true
                     hasCompletedOnboarding = true
                     withAnimation(.easeInOut(duration: 0.4)) {
                         phase = .main

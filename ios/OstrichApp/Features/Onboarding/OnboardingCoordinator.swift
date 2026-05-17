@@ -14,8 +14,10 @@ public final class OnboardingCoordinator: ObservableObject {
     @Published public var selectedMBTI: MBTI?
     @Published public var selectedZodiac: Zodiac?
     @Published public var selectedEgg: EggArchetype?
+    /// 用户自己的名字（新流程 Step4 收集）。
+    @Published public var userName: String = ""
+    /// 用户给鸵鸟起的名字（新流程 Step5 收集）。
     @Published public var ostrichName: String = ""
-    @Published public var nameReason: String = ""
     @Published public var ostrichReply: String = ""
     @Published public var ostrichDTO: OstrichDTO?
     @Published public var isAwakening = false
@@ -55,15 +57,13 @@ public final class OnboardingCoordinator: ObservableObject {
 
     // MARK: - Awaken + first message
 
-    /// 真接入 ConvexClient.awaken + chat/send。失败 fallback mock 文案。
-    /// 返回时已写入 ostrichReply / ostrichDTO（如果成功）。
-    public func awakenAndSendFirstMessage() async {
+    /// 新流程：所有选择收集完后只调 /api/awaken，不再前置发"why this name"消息
+    /// （第一句话留给 Chat 界面让用户看到鸵鸟硬编码的"你为什么给我起这个名字？"
+    /// 然后用户自己回答启动真正对话）。
+    public func awaken() async -> OstrichDTO? {
         guard let egg = selectedEgg,
               let mbti = selectedMBTI,
-              let zodiac = selectedZodiac else {
-            ostrichReply = fallbackReply()
-            return
-        }
+              let zodiac = selectedZodiac else { return nil }
         let trimmedName = ostrichName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? "鸵鸟" : trimmedName
 
@@ -71,35 +71,19 @@ public final class OnboardingCoordinator: ObservableObject {
         defer { isAwakening = false }
 
         do {
+            let trimmedUserName = userName.trimmingCharacters(in: .whitespacesAndNewlines)
             let awakenBody = AwakenRequest(
                 eggType: egg.eggType,
                 name: resolvedName,
                 userMbti: mbti.rawValue,
-                userZodiac: zodiac.apiKey
+                userZodiac: zodiac.apiKey,
+                userName: trimmedUserName.isEmpty ? nil : trimmedUserName
             )
             let dto: OstrichDTO = try await client.call(Endpoints.awaken, body: awakenBody)
             ostrichDTO = dto
-
-            // 用 ostrich.id 作为 roomId 兜底（后端实际 roomId 由 awaken 写好；
-            // demo 阶段第一句话直接用 ostrich.id 当 roomId，后端会路由到主传心室）。
-            let roomId = dto.id
-            let trimmedReason = nameReason.trimmingCharacters(in: .whitespacesAndNewlines)
-            let content = trimmedReason.isEmpty
-                ? "我给你起了这个名字。"
-                : trimmedReason
-            let sendBody = SendMessageRequest(roomId: roomId, content: content)
-            let response: ChatSendResponseDTO = try await client.call(
-                Endpoints.chatSend, body: sendBody
-            )
-            ostrichReply = response.ostrichReply.content
+            return dto
         } catch {
-            ostrichReply = fallbackReply()
+            return nil
         }
-    }
-
-    private func fallbackReply() -> String {
-        let trimmed = ostrichName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = trimmed.isEmpty ? "这个名字" : trimmed
-        return "你叫我「\(name)」…嗯。我会记住。"
     }
 }
