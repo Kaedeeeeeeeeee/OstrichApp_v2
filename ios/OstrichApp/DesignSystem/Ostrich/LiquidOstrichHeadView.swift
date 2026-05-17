@@ -136,10 +136,12 @@ public struct LiquidOstrichHeadView: View {
                     Self.wobblePoint(p, t: t * 0.55, amp: headAmp)
                 }
 
-                // 头部 clip：viewBox y < 480 范围（v4 用 height=360 in head-local AI coords，
-                // 头部 path y 范围 ~245..475，所以 clip rect 取 viewBox 全宽 + y∈[0, 480]）
+                // 头部 clip：只保留头球本体（y ≲ 410），砍掉 HEAD path 自身底部的
+                // "肩膀/翅膀状" 延伸 —— 那部分在 v4 HTML 里被 body/neck 视觉盖住，
+                // 我们用程序化脖子时它们裸露出来会显得鸵鸟有两条脖子。
+                // 头球本身：y ~ 245..400，下方留点余量到 410。
                 var headClipCtx = headCtx
-                headClipCtx.clip(to: Path(CGRect(x: 125, y: 135, width: 330, height: 345)))
+                headClipCtx.clip(to: Path(CGRect(x: 125, y: 135, width: 330, height: 275)))
                 headClipCtx.fill(Path(headPath), with: .color(OstrichColor.orange))
 
                 // 滴液（独立 wobble，不 clip）
