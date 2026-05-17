@@ -44,7 +44,7 @@ struct Step4EggBlindBoxView: View {
     }
 }
 
-/// 蛋视觉：圆角矩形 ratio 0.7:1，主色填充 + 副色斑点 + 呼吸动画。
+/// 蛋视觉：上窄下宽 Bezier 蛋型，主色填充 + 副色斑点 + 呼吸动画。
 private struct EggCell: View {
     let egg: EggArchetype
     let isSelected: Bool
@@ -53,10 +53,10 @@ private struct EggCell: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
+            EggShape()
                 .fill(egg.primary)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    EggShape()
                         .stroke(
                             isSelected ? OstrichColors.ink : OstrichColors.ink.opacity(0.08),
                             lineWidth: isSelected ? 3 : 1
@@ -64,9 +64,9 @@ private struct EggCell: View {
                 )
                 .overlay(
                     EggSpeckles(color: egg.secondary)
-                        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                        .clipShape(EggShape())
                 )
-                .aspectRatio(0.7, contentMode: .fit)
+                .aspectRatio(0.72, contentMode: .fit)
                 .scaleEffect(breath)
         }
         .accessibilityLabel("蛋 \(egg.eggType) \(egg.displayName)")
