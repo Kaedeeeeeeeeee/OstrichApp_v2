@@ -31,13 +31,10 @@ struct MainTabView: View {
                     Label("传心", systemImage: "bubble.left.fill")
                 }
 
-            PlaceholderView(
-                title: "关系图谱",
-                subtitle: "GraphView · 等 WS-F-2"
-            )
-            .tabItem {
-                Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
-            }
+            GraphView(client: deps.client)
+                .tabItem {
+                    Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
+                }
 
             WanderView(client: deps.client)
                 .tabItem {
