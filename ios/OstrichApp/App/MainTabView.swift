@@ -6,6 +6,8 @@ import SwiftUI
 
 struct MainTabView: View {
 
+    @EnvironmentObject private var deps: AppDependency
+
     init() {
         // 给 TabBar 设浅奶油色底，避免默认半透明灰。
         let appearance = UITabBarAppearance()
@@ -38,13 +40,10 @@ struct MainTabView: View {
                 Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
             }
 
-            PlaceholderView(
-                title: "遛弯",
-                subtitle: "WanderView · 等 WS-H"
-            )
-            .tabItem {
-                Label("遛弯", systemImage: "figure.walk")
-            }
+            WanderView(client: deps.client)
+                .tabItem {
+                    Label("遛弯", systemImage: "figure.walk")
+                }
 
             PlaceholderView(
                 title: "设置",
@@ -82,4 +81,5 @@ private struct PlaceholderView: View {
 
 #Preview {
     MainTabView()
+        .environmentObject(AppDependency(client: MockConvexClient()))
 }
