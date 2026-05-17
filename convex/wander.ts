@@ -131,6 +131,12 @@ export const tickAllOstriches = internalMutationGeneric({
       if (!o.walkingRoute || !o.destination) {
         continue;
       }
+      // 鸵鸟正在跟另一只鸵鸟聊天（encounters:_lockForSocializing 切到的） →
+      // 暂停推进位置，让 simulateEncounter 跑完它会切回 resting，
+      // 然后下个 cron 节拍才继续 tick。
+      if (o.currentActivity === "socializing") {
+        continue;
+      }
       const { polyline, startedAt, expectedDuration } = o.walkingRoute;
       const eta = o.destination.eta;
       const total = Math.max(1, eta - startedAt);
@@ -424,6 +430,19 @@ export const decideNextMove = internalActionGeneric({
       } as never,
     );
 
+    // 异步查"这家地方"的真事实(web_search) 填到 currentIntention.destinationFacts。
+    // fire-and-forget — 不阻塞 destination 落库 / 鸵鸟出发。如果模型查得慢,前几条
+    // walking thoughts 没事实可引用,模型瞎想;查到后续 thoughts 会自动用上。
+    await ctx.scheduler.runAfter(
+      0,
+      makeFunctionReference<"action">("wander:lookupDestinationFacts"),
+      {
+        ostrichId: args.ostrichId,
+        destinationName: destName,
+        destinationCategory: destCategory || undefined,
+      } as never,
+    );
+
     // 链式调度：走完后歇 5-15 分钟再决策下一段，自动续路。
     // 在 decideNextMove 入口的 state guard 会拦截已被召回 / 沉睡的鸵鸟，避免孤儿调度乱跑。
     const restMs = 300_000 + Math.random() * 600_000; // 5-15 分钟
@@ -433,6 +452,99 @@ export const decideNextMove = internalActionGeneric({
       makeFunctionReference<"action">("wander:decideNextMove"),
       { ostrichId: args.ostrichId } as never,
     );
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// internalMutation · _writeDestinationFacts
+//   lookupDestinationFacts 异步搜完事实后落库的部分。
+//   竞态保护：只有当前 currentIntention.destinationName 还匹配时才写,
+//   防止鸵鸟已经换目标了还把上一段的 facts 错挂到新目标上。
+// ─────────────────────────────────────────────────────────────
+
+export const _writeDestinationFacts = internalMutationGeneric({
+  args: {
+    ostrichId: v.id("ostriches"),
+    destinationName: v.string(),
+    facts: v.string(),
+  },
+  handler: async (ctx: MutationCtx, args) => {
+    const ostrich = await ctx.db.get(args.ostrichId);
+    if (!ostrich || !ostrich.currentIntention) return;
+    if (ostrich.currentIntention.destinationName !== args.destinationName) return;
+    await ctx.db.patch(args.ostrichId, {
+      currentIntention: {
+        ...ostrich.currentIntention,
+        destinationFacts: args.facts,
+      },
+    });
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// internalAction · lookupDestinationFacts
+//   用 Anthropic web_search server tool 查鸵鸟下一站的真事实(评分/招牌/趣闻),
+//   写回 currentIntention.destinationFacts。thoughts.ts 走路态 prompt 会读它。
+//
+//   - 失败/搜不到 → 静默退出,destinationFacts 保持 undefined
+//   - max_uses 控制最多调用几次搜索,够覆盖单个 POI 的概览
+//   - 输出限 200 字,避免污染 thoughts prompt 上下文
+// ─────────────────────────────────────────────────────────────
+
+export const lookupDestinationFacts = internalActionGeneric({
+  args: {
+    ostrichId: v.id("ostriches"),
+    destinationName: v.string(),
+    destinationCategory: v.optional(v.string()),
+  },
+  handler: async (ctx: ActionCtx, args) => {
+    try {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return;
+      // 动态 import 避免 wander.ts 文件层增加 Anthropic 依赖在 mutation 路径出现
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const client = new Anthropic({ apiKey });
+
+      const catHint = args.destinationCategory ? `(${args.destinationCategory})` : "";
+      const userMessage =
+        `用 web_search 搜一下 "${args.destinationName}" ${catHint}, 在日本东京一带。\n` +
+        `告诉我这家地方有什么特别的：评分、招牌商品 / 风格、营业时间、有趣的小细节。\n` +
+        `最多 100 字,中文,直接说要点,不要总结性开头("我搜到..."这种)。\n` +
+        `如果搜不到具体资料,直接回 "暂无资料"。`;
+
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 400,
+        messages: [{ role: "user", content: userMessage }],
+        tools: [
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 3,
+          } as never, // Anthropic SDK type 还没正式 union 这个 server tool 形态
+        ],
+      });
+
+      let text = "";
+      for (const block of response.content) {
+        if (block.type === "text") {
+          text += (block as { text: string }).text;
+        }
+      }
+      const facts = text.trim().slice(0, 200);
+      if (!facts || facts.includes("暂无资料")) return;
+
+      await ctx.runMutation(
+        makeFunctionReference<"mutation">("wander:_writeDestinationFacts") as never,
+        {
+          ostrichId: args.ostrichId,
+          destinationName: args.destinationName,
+          facts,
+        } as never,
+      );
+    } catch (err) {
+      console.warn("[wander] lookupDestinationFacts failed:", err);
+    }
   },
 });
 

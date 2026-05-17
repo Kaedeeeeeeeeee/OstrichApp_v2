@@ -38,6 +38,75 @@ public enum OstrichMapCameraMode: Equatable {
     }
 }
 
+// MARK: - Route style
+
+/// 鸵鸟脚下导航线的视觉配置。
+/// 之前试过"导航绿 + 蚂蚁线"动效,但 polyline 每 100ms 重建一次,虚线视觉不稳一闪一闪,
+/// 回滚到橙色实线 —— 唯一的视觉魔法仍然是 remainingRoute 切片:走过的部分自动消失。
+private enum RouteStyle {
+    static let strokeColor = UIColor.systemOrange.withAlphaComponent(0.9)
+    static let lineWidth: CGFloat = 4
+}
+
+// MARK: - Route slicing
+
+/// 把鸵鸟当前坐标投影到 polyline 上，切出"剩余还要走的"那段。
+/// 走过的部分自动消失。O(N) 找最近 segment，N 通常 < 20，可忽略开销。
+/// 返回 < 2 个点时调用方应跳过 overlay（MKPolyline 要求至少 2 点）。
+private func remainingRoute(
+    from full: [CLLocationCoordinate2D],
+    ostrich: CLLocationCoordinate2D
+) -> [CLLocationCoordinate2D] {
+    guard full.count >= 2 else { return full }
+    var bestIdx = 0
+    var bestT: Double = 0
+    var bestDist: Double = .infinity
+    for i in 0..<(full.count - 1) {
+        let (t, d) = projectOntoSegment(p: ostrich, a: full[i], b: full[i + 1])
+        if d < bestDist {
+            bestDist = d
+            bestIdx = i
+            bestT = t
+        }
+    }
+    let a = full[bestIdx]
+    let b = full[bestIdx + 1]
+    let cut = CLLocationCoordinate2D(
+        latitude: a.latitude + (b.latitude - a.latitude) * bestT,
+        longitude: a.longitude + (b.longitude - a.longitude) * bestT
+    )
+    var result: [CLLocationCoordinate2D] = [cut]
+    if bestIdx + 1 < full.count {
+        result.append(contentsOf: full[(bestIdx + 1)...])
+    }
+    return result
+}
+
+/// 把点 p 投影到线段 ab 上，返回 (t∈[0,1], 距离)。
+/// 距离单位是"经纬度度",不是米;只用来比较哪个 segment 更近,绝对值不重要。
+private func projectOntoSegment(
+    p: CLLocationCoordinate2D,
+    a: CLLocationCoordinate2D,
+    b: CLLocationCoordinate2D
+) -> (t: Double, dist: Double) {
+    let dx = b.longitude - a.longitude
+    let dy = b.latitude - a.latitude
+    let lenSq = dx * dx + dy * dy
+    if lenSq < 1e-12 {
+        let px = p.longitude - a.longitude
+        let py = p.latitude - a.latitude
+        return (0, (px * px + py * py).squareRoot())
+    }
+    let raw =
+        ((p.longitude - a.longitude) * dx + (p.latitude - a.latitude) * dy) / lenSq
+    let t = max(0, min(1, raw))
+    let projX = a.longitude + t * dx
+    let projY = a.latitude + t * dy
+    let dxp = p.longitude - projX
+    let dyp = p.latitude - projY
+    return (t, (dxp * dxp + dyp * dyp).squareRoot())
+}
+
 // MARK: - Annotation
 
 /// 简单可识别的鸵鸟 annotation。MKAnnotation 必须是 class。
@@ -160,22 +229,33 @@ public struct OstrichMapView: UIViewRepresentable {
             map.addAnnotation(selfAnnotation)
         }
 
-        // ── nearby annotations 整体替换（god 模式 10s 一次刷新，频率低，重建可接受）──
+        // ── nearby annotations 整体替换 ──
+        // 上帝视角只渲染自己 —— 周围鸵鸟点会聚成一团遮挡用户自己。
+        // 顶部 caption 的 "附近有 X 只鸵鸟" 数字仍然来自 mapGod cells 聚合,不受影响。
+        // 局域视角才显示周围鸵鸟（模糊小点,BLUEPRINT §10.3）。
         let oldNearby = map.annotations.filter { ann in
             ann !== context.coordinator.selfAnnotation && !(ann is MKUserLocation)
         }
         map.removeAnnotations(oldNearby)
-        for coord in nearbyCoords {
-            map.addAnnotation(
-                OstrichAnnotation(coordinate: coord, isSelf: false, displayName: "")
-            )
+        if cameraMode == .local {
+            for coord in nearbyCoords {
+                map.addAnnotation(
+                    OstrichAnnotation(coordinate: coord, isSelf: false, displayName: "")
+                )
+            }
         }
 
-        // ── overlays（每次重建，polyline 数量小）──
+        // ── overlays ──
+        // local 模式才画路线;且只画"鸵鸟当前位置→终点"那段 —— 走过的路自动消失。
+        // 每次 updateUIView 重建 polyline,但 Coordinator 保留 currentDashPhase,
+        // 蚂蚁线动画在 rebuild 间隙连续不跳。
         map.removeOverlays(map.overlays)
         if cameraMode == .local, route.count >= 2 {
-            let polyline = MKPolyline(coordinates: route, count: route.count)
-            map.addOverlay(polyline)
+            let remaining = remainingRoute(from: route, ostrich: ostrichCoord)
+            if remaining.count >= 2 {
+                let polyline = MKPolyline(coordinates: remaining, count: remaining.count)
+                map.addOverlay(polyline)
+            }
         }
 
         // 把 cameraMode 透给 coordinator → annotation view 才知道按哪种风格渲染
@@ -188,6 +268,17 @@ public struct OstrichMapView: UIViewRepresentable {
         //   避免 simulator 每 2s 的位置更新触发完整 setCamera 打断 dive-in 动画。
         let modeChanged = context.coordinator.lastCameraMode != cameraMode
         if modeChanged {
+            // 强制 self pin 用新 mode 的样式重画。
+            // 不这样做 → self annotation 跨更新复用(KVO 平滑过渡的优化),MKMapView 只在
+            // annotation 新加入时调 viewFor。从 god 进 local 时,view 上还挂着 godSelfPinImage
+            // (小橙点 + 光晕),Bug #3。
+            // remove + add 强制 MKMapView 再调一次 viewFor,coordinator.cameraMode 此时已经
+            // 是新模式(上面 line 264 已 sync),拿到的就是对的 image。
+            // 视觉代价 = 一帧 pin 闪一下,但本来就在跑 0.6s 的 setCamera 电影感动画,看不出来。
+            if let ann = context.coordinator.selfAnnotation {
+                map.removeAnnotation(ann)
+                map.addAnnotation(ann)
+            }
             let camera = MKMapCamera(
                 lookingAtCenter: ostrichCoord,
                 fromDistance: cameraMode.distance,
@@ -292,8 +383,8 @@ public struct OstrichMapView: UIViewRepresentable {
         public func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                renderer.strokeColor = UIColor.systemOrange.withAlphaComponent(0.9)
-                renderer.lineWidth = 4
+                renderer.strokeColor = RouteStyle.strokeColor
+                renderer.lineWidth = RouteStyle.lineWidth
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
                 return renderer

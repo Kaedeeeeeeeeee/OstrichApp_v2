@@ -26,6 +26,9 @@ struct LocalViewView: View {
     let activityLabel: String
     let isLoadingRoute: Bool
     let inFlightAction: Bool
+    /// 鸵鸟跟另一只鸵鸟聊天中时，对方鸵鸟的名字。speechBubble 切到 dialog 态最高优先级。
+    /// 默认 nil（Preview / 老调用方不需要传 —— Swift memberwise init 会自动让它可省略）。
+    var encounterPartner: String? = nil
     let onBackToGod: () -> Void
     let onCallHome: () -> Void
     let onAllowToStay: () -> Void
@@ -91,7 +94,26 @@ struct LocalViewView: View {
     @ViewBuilder
     private var speechBubble: some View {
         OstrichCard {
-            if isLoadingRoute {
+            if let partner = encounterPartner, !partner.isEmpty {
+                // 最高优先级：鸵鸟在跟另一只鸵鸟聊天 → dialog bubble
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(OstrichColors.orangeDeep.opacity(0.85))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("和 \(partner) 聊起来")
+                            .font(OstrichTypography.callout)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(OstrichColors.ink)
+                        Text("一会儿翻日记看 ta 们都聊了啥")
+                            .font(OstrichTypography.caption)
+                            .foregroundStyle(OstrichColors.ink.opacity(0.55))
+                    }
+                    Spacer(minLength: 0)
+                    LocalAnimatedDots()
+                        .padding(.bottom, 2)
+                }
+            } else if isLoadingRoute {
                 HStack(spacing: OstrichSpacing.s) {
                     ProgressView()
                         .scaleEffect(0.85)
@@ -232,6 +254,7 @@ private struct LocalAnimatedDots: View {
             activityLabel: "resting",
             isLoadingRoute: true,
             inFlightAction: false,
+            encounterPartner: nil,
             onBackToGod: {},
             onCallHome: {},
             onAllowToStay: {},
@@ -250,6 +273,7 @@ private struct LocalAnimatedDots: View {
             activityLabel: "walking",
             isLoadingRoute: false,
             inFlightAction: false,
+            encounterPartner: nil,
             onBackToGod: {},
             onCallHome: {},
             onAllowToStay: {},
@@ -268,6 +292,7 @@ private struct LocalAnimatedDots: View {
             activityLabel: "resting",
             isLoadingRoute: false,
             inFlightAction: false,
+            encounterPartner: nil,
             onBackToGod: {},
             onCallHome: {},
             onAllowToStay: {},
@@ -286,6 +311,7 @@ private struct LocalAnimatedDots: View {
             activityLabel: "resting",
             isLoadingRoute: false,
             inFlightAction: false,
+            encounterPartner: nil,
             onBackToGod: {},
             onCallHome: {},
             onAllowToStay: {},

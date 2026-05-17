@@ -149,14 +149,20 @@ export const _loadGenerationContext = internalQueryGeneric({
     const user = await ctx.db.get(ostrich.ownerId);
     if (!user) throw new Error(`User not found: ${ostrich.ownerId}`);
 
-    // 拉最近若干条 thoughts（不含当前这条）做去重提示
+    // 拉最近若干条 thoughts（不含当前这条）做去重提示。
+    // **关键**：只保留"当前目的地决策之后"产生的 thoughts —— 不然鸵鸟换了新目标
+    // 还在路上谈论上一次去的地方(Bug #2)。decidedAt 是当前 currentIntention 的写入时间,
+    // 它一变就等于鸵鸟决定了一个新目标,之前所有 thoughts 都跟新目标无关。
+    // 没有 decidedAt 兜底（鸵鸟第一次决策前）→ 不过滤。
+    const decidedAt = ostrich.currentIntention?.decidedAt;
     const recentRows = await ctx.db
       .query("ostrich_thoughts")
       .withIndex("by_ostrich_createdAt", (q) => q.eq("ostrichId", thought.ostrichId))
       .order("desc")
-      .take(RECENT_THOUGHTS_LIMIT + 1);
+      .take(RECENT_THOUGHTS_LIMIT * 4 + 1); // 多拉几条留过滤余量
     const recent = recentRows
       .filter((r) => r._id !== thought._id && r.content.trim().length > 0)
+      .filter((r) => decidedAt === undefined || r.createdAt >= decidedAt)
       .slice(0, RECENT_THOUGHTS_LIMIT)
       .map((r) => r.content);
 
@@ -209,6 +215,7 @@ function formatRecent(recent: string[]): string {
 function buildWalkingUserMessage(args: {
   locationName: string;
   destinationName?: string;
+  destinationFacts?: string;
   poiList: string;
   recentThoughts: string[];
   mood: { excitement: number; fatigue: number; curiosity: number };
@@ -217,10 +224,17 @@ function buildWalkingUserMessage(args: {
   const poiBlock = args.poiList
     ? `\n身边 100m 内你看得到：\n${args.poiList}\n`
     : "\n你在一条没什么特别的街上走，周围没什么显眼的店。\n";
+  // 后端 web_search 查到的真事实(评分/招牌/趣闻)。鸵鸟可以参考(但不一定要每次都用),
+  // 让独白有"真实感",避免每条都泛泛而谈。
+  const factsBlock =
+    args.destinationFacts && args.destinationFacts.length > 0
+      ? `\n你听说这家地方：${args.destinationFacts}\n`
+      : "";
   return (
     `你正走在 ${args.locationName}${dest}。现在 ${formatTimeHM()}。\n` +
     `心情：兴奋 ${args.mood.excitement.toFixed(2)}，疲惫 ${args.mood.fatigue.toFixed(2)}，好奇 ${args.mood.curiosity.toFixed(2)}。\n` +
     poiBlock +
+    factsBlock +
     `\n刚才你想过：${formatRecent(args.recentThoughts)}\n\n` +
     `你瞥到 / 想到一句话——可能是看到什么、想起谁、联想到什么。\n` +
     `就一句，不超过 20 字，像内心独白。\n` +
@@ -266,7 +280,7 @@ type GenerationContext = {
     currentLocation: { lat: number; lng: number; friendlyName: string };
     currentActivity: string;
     mood: { excitement: number; fatigue: number; curiosity: number };
-    currentIntention?: { destinationName: string };
+    currentIntention?: { destinationName: string; destinationFacts?: string };
   };
   user: { name: string; mbti: string; zodiac: string };
   recentThoughts: string[];
@@ -325,6 +339,7 @@ export const generateThought = internalActionGeneric({
           ? buildWalkingUserMessage({
               locationName: data.thought.locationName,
               destinationName: data.ostrich.currentIntention?.destinationName,
+              destinationFacts: data.ostrich.currentIntention?.destinationFacts,
               poiList,
               recentThoughts: data.recentThoughts,
               mood: data.ostrich.mood,

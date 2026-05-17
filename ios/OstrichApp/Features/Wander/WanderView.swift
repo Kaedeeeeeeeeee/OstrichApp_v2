@@ -55,6 +55,8 @@ public struct WanderView: View {
     @State private var reason: String? = nil
     @State private var activityLabel: String = ""
     @State private var ostrichCount: Int = 24
+    /// 鸵鸟正在跟另一只鸵鸟相遇聊天时填，LocalView speech bubble 切到 dialog 态。
+    @State private var currentEncounterPartner: String? = nil
     /// 后端 walkingRoute.startedAt 的 ISO 字符串。
     /// 用来检测"是不是新一段路线到了"（不同的 startedAt → 重建 simulator）。
     @State private var lastRouteStartedAt: String? = nil
@@ -70,6 +72,8 @@ public struct WanderView: View {
 
     @State private var showLookAround: Bool = false
     @State private var inFlightAction: Bool = false
+    /// 右上角日记按钮触发 → sheet 弹 DiaryView。
+    @State private var showDiary: Bool = false
 
     // MARK: - 鸵鸟头顶气泡 thought（仅 local 模式）
 
@@ -116,7 +120,8 @@ public struct WanderView: View {
                     GodViewView(
                         ostrichCount: ostrichCount,
                         destinationName: destinationName,
-                        onRecall: enterLocal
+                        onRecall: enterLocal,
+                        onOpenDiary: { showDiary = true }
                     )
                     .transition(.opacity)
                 } else {
@@ -127,6 +132,7 @@ public struct WanderView: View {
                         activityLabel: activityLabel,
                         isLoadingRoute: isLoadingRoute,
                         inFlightAction: inFlightAction,
+                        encounterPartner: currentEncounterPartner,
                         onBackToGod: enterGod,
                         onCallHome: { Task { await sendCallHome() } },
                         onAllowToStay: { Task { await sendAllowToStay() } },
@@ -168,6 +174,17 @@ public struct WanderView: View {
                 showLookAround = false
             }
             .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showDiary) {
+            // DiaryView 用 timeline endpoint 拉聚合数据。WanderView 把 client 传下去。
+            NavigationStack {
+                DiaryView(client: client)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("完成") { showDiary = false }
+                        }
+                    }
+            }
         }
     }
 
@@ -303,6 +320,8 @@ public struct WanderView: View {
                 self.destinationCategory = response.destinationCategory
                 self.reason = response.reason
                 self.activityLabel = response.ostrich.activity
+                // 相遇期间填 partnerName → LocalView speech bubble 切到 dialog 态
+                self.currentEncounterPartner = response.currentEncounter?.partnerName
             }
             if let polyline = response.route {
                 // 检测新一段路线：startedAt 变化 = 后端写了新的 walkingRoute

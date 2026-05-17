@@ -39,6 +39,10 @@ export default defineSchema({
     createdAt: v.number(),
     // "left_world" = 用户主动退出"如果有一天我不在了"
     status: v.union(v.literal("alive"), v.literal("left_world")),
+    // NPC 用户：seedNPCs 创建的虚构主人卡片。真用户 isNPC 缺省（视为 false）。
+    // bio 是 NPC 主人简介，feed 进相遇 prompt 让对话有可信背景；真用户不填。
+    isNPC: v.optional(v.boolean()),
+    bio: v.optional(v.string()),
   })
     .index("by_appleId", ["appleId"])
     .index("by_status", ["status"]),
@@ -50,6 +54,11 @@ export default defineSchema({
     ownerId: v.id("users"),
     eggType: v.number(), // 1..16
     name: v.string(),
+
+    // NPC 鸵鸟：跟真用户鸵鸟用同一套 wander / encounter 系统跑，
+    // 区别只是 iOS 端不允许跟其主人"建联"（NPC_CANNOT_BOND 防线）。
+    // 真鸵鸟 isNPC 缺省，视为 false。
+    isNPC: v.optional(v.boolean()),
 
     // 蛋决定的核心人格（不可变）
     personality: v.object({
@@ -108,6 +117,11 @@ export default defineSchema({
       curiosity: v.number(),
     }),
 
+    // 跟另一只鸵鸟正在 socializing 时，指向对方 ostrich id。
+    // encounters:_lockForSocializing 设置，_unlockToResting 清掉。
+    // iOS LocalView 用它知道"我的鸵鸟在跟谁聊"显示在 dialog bubble。
+    socializingWith: v.optional(v.id("ostriches")),
+
     // 当前决策（来自 decideNextMove）。
     //   - 出发时写入：destinationName / destinationCategory / reason
     //   - 到达后不再删除：此时同一份数据语义上变成 "我现在在哪 + 来这里的原因"，
@@ -119,6 +133,10 @@ export default defineSchema({
       v.object({
         destinationName: v.string(),
         destinationCategory: v.optional(v.string()),
+        // 后端 web_search 查到的关于这个地方的真事实(评分/招牌/趣闻),
+        // 由 wander.ts::lookupDestinationFacts fire-and-forget 异步填进来。
+        // thoughts.ts 走路态 prompt 会把它喂给模型 → 鸵鸟路上独白能引用真实信息。
+        destinationFacts: v.optional(v.string()),
         reason: v.string(),
         decidedAt: v.number(),
       }),
@@ -247,6 +265,9 @@ export default defineSchema({
     ),
     location: v.optional(simpleLocationValidator),
     encounteredOstrichId: v.optional(v.id("ostriches")),
+    // 相遇日记里"鸵鸟对相遇方的一句话印象"。simulateEncounter 末尾 LLM 提取。
+    // 不是相遇产生的 daily diary 这里为 undefined。
+    takeaway: v.optional(v.string()),
     imagery: v.optional(
       v.object({
         mapItemId: v.string(),
@@ -328,6 +349,27 @@ export default defineSchema({
     .index("by_expiresAt", ["expiresAt"]),
 
   // ───────────────────────────────────────────────────────────
+  // 11.5 unlock_requests — 灰色日记解锁请求
+  //
+  // 用户点击 redacted diary → POST /api/diary/requestUnlock 写一条 pending
+  //   - 对方鸵鸟是 NPC：scheduler.runAfter(1-2 天) _autoApproveUnlock 把 diary 改 visible
+  //   - 对方是真用户：写入 pending 等对方 App 里看到 + 主动 approve（P4 真用户 UI 留）
+  // iOS DiaryView 3s polling /api/diary/unlockStatus 看 status 变 approved 自动 reveal。
+  unlock_requests: defineTable({
+    diaryEntryId: v.id("diary_entries"),
+    fromOstrichId: v.id("ostriches"),
+    toOstrichId: v.id("ostriches"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("denied"),
+    ),
+    createdAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_diary", ["diaryEntryId"])
+    .index("by_toOstrich_status", ["toOstrichId", "status"]),
+
   // 12. ostrich_thoughts — 实时内心独白（头顶气泡）
   //     仅用户观看 LocalView 时按 1-3min 节奏生成。
   //     - status="streaming"：Anthropic 流式中,content 逐 chunk 增长
