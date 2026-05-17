@@ -20,7 +20,7 @@ import {
 import { v, type GenericId as Id } from "convex/values";
 import schema from "./schema";
 import type { ChatResult } from "./claude";
-import { geocode } from "./lib/mapPoiStub";
+import { geocode } from "./lib/mapPoi";
 
 type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 type QueryCtx = GenericQueryCtx<DataModel>;
@@ -263,6 +263,10 @@ export const simulateEncounter = internalActionGeneric({
     const redactA = Math.random() < REDACT_PROBABILITY;
     const redactB = Math.random() < REDACT_PROBABILITY;
 
+    const resolvedFriendlyName =
+      profileA.currentLocation.friendlyName ||
+      (await geocode(profileA.currentLocation.lat, profileA.currentLocation.lng));
+
     await ctx.runMutation(
       makeFunctionReference<"mutation">("encounters:_writeEncounter") as never,
       {
@@ -271,9 +275,7 @@ export const simulateEncounter = internalActionGeneric({
         cellId: args.cellId,
         lat: profileA.currentLocation.lat,
         lng: profileA.currentLocation.lng,
-        friendlyName:
-          profileA.currentLocation.friendlyName ||
-          geocode(profileA.currentLocation.lat, profileA.currentLocation.lng),
+        friendlyName: resolvedFriendlyName,
         transcript,
         diaryAContent,
         diaryBContent,

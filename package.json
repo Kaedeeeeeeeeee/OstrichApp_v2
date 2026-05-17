@@ -17,7 +17,8 @@
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
-    "convex": "^1.39.1"
+    "convex": "^1.39.1",
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
@@ -27,6 +28,7 @@
     "convex-test": "^0.0.30",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
+    "msw": "^2.14.6",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "vitest": "^2.0.0"

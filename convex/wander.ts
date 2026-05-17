@@ -18,7 +18,12 @@ import {
 } from "convex/server";
 import { v, type GenericId as Id } from "convex/values";
 import schema from "./schema";
-import { searchNearby, walkingRoute, geocode, cellIdOf } from "./lib/mapPoiStub";
+// 真实 Apple Maps Server API（WS-G / issue #15）。
+// - searchNearby / walkingRoute / geocode 都是 async，只能在 action 里 await。
+// - cellIdOf 是纯函数（lat/lng 取 3 位小数），re-export 自 stub，mutation 安全。
+// - tickAllOstriches 是 mutation，不能 fetch，所以那里仍直接 import 同步版 geocode。
+import { searchNearby, walkingRoute, cellIdOf } from "./lib/mapPoi";
+import { geocode as geocodeSync } from "./lib/mapPoiStub";
 import type { ChatResult } from "./claude";
 
 type DataModel = DataModelFromSchemaDefinition<typeof schema>;
@@ -128,7 +133,9 @@ export const tickAllOstriches = internalMutationGeneric({
 
       const { lat, lng } = interpolatePolyline(polyline, progress);
       const cellId = cellIdOf(lat, lng);
-      const friendlyName = geocode(lat, lng);
+      // mutation 上下文里不能 fetch → 用 stub 的同步 geocode；
+      // 每只鸵鸟到达 resting 之前会被 decideNextMove(action) 用真 API 刷一次。
+      const friendlyName = geocodeSync(lat, lng);
       const previousCellId = o.currentLocation.cellId;
 
       if (arrived) {
@@ -224,8 +231,11 @@ export const _writeDestination = internalMutationGeneric({
 // 选 POI 的 fallback：随机选附近一个非当前位置的 POI。
 // ─────────────────────────────────────────────────────────────
 
-function fallbackPickPoi(lat: number, lng: number): { lat: number; lng: number; name: string } {
-  const nearby = searchNearby(lat, lng, 5_000);
+async function fallbackPickPoi(
+  lat: number,
+  lng: number,
+): Promise<{ lat: number; lng: number; name: string }> {
+  const nearby = await searchNearby(lat, lng, 5_000);
   // 排掉过近（≤30m）的 POI，防止"出发即到达"
   const candidates = nearby.filter((p) => {
     const dlat = p.lat - lat;
@@ -305,7 +315,7 @@ export const decideNextMove = internalActionGeneric({
     };
 
     const { lat, lng } = profile.currentLocation;
-    const poiList = searchNearby(lat, lng, 5_000);
+    const poiList = await searchNearby(lat, lng, 5_000);
     const poiSummary = poiList.map((p) => `- ${p.id} · ${p.name} (${p.category})`).join("\n");
 
     const userMessage =
@@ -339,17 +349,17 @@ export const decideNextMove = internalActionGeneric({
         destLat = picked.lat;
         destLng = picked.lng;
       } else {
-        const fb = fallbackPickPoi(lat, lng);
+        const fb = await fallbackPickPoi(lat, lng);
         destLat = fb.lat;
         destLng = fb.lng;
       }
     } else {
-      const fb = fallbackPickPoi(lat, lng);
+      const fb = await fallbackPickPoi(lat, lng);
       destLat = fb.lat;
       destLng = fb.lng;
     }
 
-    const route = walkingRoute({ lat, lng }, { lat: destLat, lng: destLng });
+    const route = await walkingRoute({ lat, lng }, { lat: destLat, lng: destLng });
     await ctx.runMutation(
       makeFunctionReference<"mutation">("wander:_writeDestination") as never,
       {
