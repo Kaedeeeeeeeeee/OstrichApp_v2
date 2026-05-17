@@ -33,19 +33,16 @@ struct MainTabView: View {
 
             PlaceholderView(
                 title: "关系图谱",
-                subtitle: "GraphView · 等 WS-G"
+                subtitle: "GraphView · 等 WS-F-2"
             )
             .tabItem {
                 Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
             }
 
-            PlaceholderView(
-                title: "遛弯",
-                subtitle: "WanderView · 等 WS-H"
-            )
-            .tabItem {
-                Label("遛弯", systemImage: "figure.walk")
-            }
+            WanderView(client: deps.client)
+                .tabItem {
+                    Label("遛弯", systemImage: "figure.walk")
+                }
 
             SettingsView()
                 .tabItem {
