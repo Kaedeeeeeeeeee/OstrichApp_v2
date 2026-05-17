@@ -1,5 +1,8 @@
 // OnboardingCoordinatorTests.swift
-// 验证 OnboardingCoordinator：step 状态转移 + awaken/chat 调用流程。
+// 验证 OnboardingCoordinator：新流程的 step 状态转移 + awaken 调用。
+//
+// 新流程: welcome → eggBlindBox → eggHatch → userNameAsk → ostrichNameInput →
+//          mbti → zodiac → awakening
 
 import Foundation
 import Testing
@@ -18,8 +21,9 @@ struct OnboardingCoordinatorTests {
     @Test func nextAdvancesStepInOrder() {
         let coordinator = OnboardingCoordinator(client: MockConvexClient())
         let expected: [OnboardingStep] = [
-            .mbti, .zodiac, .eggBlindBox, .eggHatch,
-            .firstChat, .nameInput, .ostrichResponds, .finish
+            .eggBlindBox, .eggHatch,
+            .userNameAsk, .ostrichNameInput,
+            .mbti, .zodiac, .awakening
         ]
         for step in expected {
             coordinator.next()
@@ -27,11 +31,11 @@ struct OnboardingCoordinatorTests {
         }
     }
 
-    @Test func nextAtFinishIsNoop() {
+    @Test func nextAtAwakeningIsNoop() {
         let coordinator = OnboardingCoordinator(client: MockConvexClient())
-        coordinator.goTo(.finish)
+        coordinator.goTo(.awakening)
         coordinator.next()
-        #expect(coordinator.step == .finish)
+        #expect(coordinator.step == .awakening)
     }
 
     @Test func selectionsAreStored() {
@@ -39,14 +43,18 @@ struct OnboardingCoordinatorTests {
         coordinator.selectMBTI(.INFP)
         coordinator.selectZodiac(.cancer)
         coordinator.selectEgg(EggCatalog.all[3])
+        coordinator.userName = "诗枫"
+        coordinator.ostrichName = "柱子"
         #expect(coordinator.selectedMBTI == .INFP)
         #expect(coordinator.selectedZodiac == .cancer)
         #expect(coordinator.selectedEgg?.archetype == "CUDDLER")
+        #expect(coordinator.userName == "诗枫")
+        #expect(coordinator.ostrichName == "柱子")
     }
 
-    // MARK: - Awaken + chat send 流程
+    // MARK: - Awaken 流程（不再前置 chat send）
 
-    @Test func awakenCallsConvexThenChatSend() async {
+    @Test func awakenCallsConvex() async {
         let mock = MockConvexClient()
         let dto = OstrichDTO(
             id: "ost_123",
@@ -58,41 +66,28 @@ struct OnboardingCoordinatorTests {
             state: "awake",
             currentLocation: LocationDTO(lat: 35.6, lng: 139.7, friendlyName: "涩谷"),
             currentActivity: "resting",
-            daysTogether: 1
+            daysTogether: 1,
+            mainRoomId: "room_abc"
         )
         mock.stub(path: Endpoints.awaken, response: dto)
-        let reply = MessageDTO(
-            id: "m1",
-            roomId: "ost_123",
-            sender: "ostrich",
-            senderId: "ost_123",
-            content: "嗯。我记住了。",
-            createdAt: "2026-05-17T00:00:01Z"
-        )
-        let chatResponse = ChatSendResponseDTO(
-            messageId: "m0",
-            ostrichReply: reply,
-            toolCalls: []
-        )
-        mock.stub(path: Endpoints.chatSend, response: chatResponse)
 
         let coordinator = OnboardingCoordinator(client: mock)
         coordinator.selectMBTI(.INFP)
         coordinator.selectZodiac(.cancer)
         coordinator.selectEgg(EggCatalog.all[3])
+        coordinator.userName = "诗枫"
         coordinator.ostrichName = "柱子"
-        coordinator.nameReason = "看你像我表哥"
 
-        await coordinator.awakenAndSendFirstMessage()
+        let result = await coordinator.awaken()
 
-        #expect(coordinator.ostrichReply == "嗯。我记住了。")
+        #expect(result?.id == "ost_123")
         #expect(coordinator.ostrichDTO?.id == "ost_123")
-        #expect(mock.calls.count == 2)
+        #expect(coordinator.ostrichDTO?.mainRoomId == "room_abc")
+        #expect(mock.calls.count == 1)
         #expect(mock.calls[0].path == Endpoints.awaken)
-        #expect(mock.calls[1].path == Endpoints.chatSend)
     }
 
-    @Test func awakenFallbackOnFailure() async {
+    @Test func awakenReturnsNilOnFailure() async {
         let mock = MockConvexClient()
         mock.stubError(path: Endpoints.awaken, error: .claudeUnavailable)
 
@@ -100,51 +95,21 @@ struct OnboardingCoordinatorTests {
         coordinator.selectMBTI(.INFP)
         coordinator.selectZodiac(.cancer)
         coordinator.selectEgg(EggCatalog.all[3])
+        coordinator.userName = "诗枫"
         coordinator.ostrichName = "柱子"
-        coordinator.nameReason = "看你像我表哥"
 
-        await coordinator.awakenAndSendFirstMessage()
+        let result = await coordinator.awaken()
 
-        #expect(coordinator.ostrichReply.contains("柱子"))
+        #expect(result == nil)
         #expect(coordinator.ostrichDTO == nil)
-    }
-
-    @Test func awakenFallbackOnChatSendFailure() async {
-        let mock = MockConvexClient()
-        let dto = OstrichDTO(
-            id: "ost_xyz",
-            ownerId: "u1",
-            name: "豆子",
-            eggType: 2,
-            archetype: "POET",
-            awakenedAt: "2026-05-17T00:00:00Z",
-            state: "awake",
-            currentLocation: LocationDTO(lat: 0, lng: 0, friendlyName: "?"),
-            currentActivity: "resting",
-            daysTogether: 1
-        )
-        mock.stub(path: Endpoints.awaken, response: dto)
-        mock.stubError(path: Endpoints.chatSend, error: .rateLimited)
-
-        let coordinator = OnboardingCoordinator(client: mock)
-        coordinator.selectMBTI(.ENFP)
-        coordinator.selectZodiac(.leo)
-        coordinator.selectEgg(EggCatalog.all[1])
-        coordinator.ostrichName = "豆子"
-        coordinator.nameReason = "圆圆的"
-
-        await coordinator.awakenAndSendFirstMessage()
-
-        #expect(coordinator.ostrichReply.contains("豆子"))
-        #expect(mock.calls.count == 2)
     }
 
     @Test func awakenSkippedWhenMissingSelections() async {
         let mock = MockConvexClient()
         let coordinator = OnboardingCoordinator(client: mock)
         // 故意不选 egg / mbti / zodiac
-        await coordinator.awakenAndSendFirstMessage()
-        #expect(coordinator.ostrichReply.isEmpty == false)
+        let result = await coordinator.awaken()
+        #expect(result == nil)
         #expect(mock.calls.isEmpty)
     }
 }

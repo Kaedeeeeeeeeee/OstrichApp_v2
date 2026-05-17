@@ -1,14 +1,17 @@
 // OnboardingFlow.swift
-// 主容器，根据 coordinator.step 切换 9 个步骤视图。
-// 见 BLUEPRINT §13.2 / DEMO_SCRIPT 00:15-02:00。
+// 主容器，根据 coordinator.step 切换 8 个步骤视图。
+// 流程见 OnboardingStep 注释（demo 试跑后的新顺序）：
+//   welcome → eggBlindBox → eggHatch → userNameAsk → ostrichNameInput →
+//   mbti → zodiac → awakening (调 /api/awaken 后直接跳 Chat)
 
 import SwiftUI
 
 struct OnboardingFlow: View {
     @StateObject private var coordinator: OnboardingCoordinator
-    let onComplete: () -> Void
+    /// 完成 onboarding 时回调，参数是 awaken 返回的 OstrichDTO（含 mainRoomId）。
+    let onComplete: (_ ostrichDTO: OstrichDTO?) -> Void
 
-    init(client: ConvexClientProtocol, onComplete: @escaping () -> Void) {
+    init(client: ConvexClientProtocol, onComplete: @escaping (_ ostrichDTO: OstrichDTO?) -> Void) {
         _coordinator = StateObject(wrappedValue: OnboardingCoordinator(client: client))
         self.onComplete = onComplete
     }
@@ -21,22 +24,20 @@ struct OnboardingFlow: View {
                 switch coordinator.step {
                 case .welcome:
                     Step1WelcomeView(coordinator: coordinator)
-                case .mbti:
-                    Step2MBTIView(coordinator: coordinator)
-                case .zodiac:
-                    Step3ZodiacView(coordinator: coordinator)
                 case .eggBlindBox:
                     Step4EggBlindBoxView(coordinator: coordinator)
                 case .eggHatch:
                     Step5EggHatchView(coordinator: coordinator)
-                case .firstChat:
-                    Step6FirstChatView(coordinator: coordinator)
-                case .nameInput:
-                    Step7NameInputView(coordinator: coordinator)
-                case .ostrichResponds:
-                    Step8OstrichRespondsView(coordinator: coordinator)
-                case .finish:
-                    Step9FinishView(coordinator: coordinator, onComplete: onComplete)
+                case .userNameAsk:
+                    Step4UserNameAskView(coordinator: coordinator)
+                case .ostrichNameInput:
+                    Step5OstrichNameView(coordinator: coordinator)
+                case .mbti:
+                    Step2MBTIView(coordinator: coordinator)
+                case .zodiac:
+                    Step3ZodiacView(coordinator: coordinator)
+                case .awakening:
+                    Step8AwakeningView(coordinator: coordinator, onComplete: onComplete)
                 }
             }
             .animation(.easeInOut(duration: 0.32), value: coordinator.step)
@@ -46,5 +47,5 @@ struct OnboardingFlow: View {
 }
 
 #Preview {
-    OnboardingFlow(client: MockConvexClient(), onComplete: {})
+    OnboardingFlow(client: MockConvexClient(), onComplete: { _ in })
 }
