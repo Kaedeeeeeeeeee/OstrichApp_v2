@@ -8,10 +8,14 @@ import SwiftUI
 
 struct OnboardingFlow: View {
     @StateObject private var coordinator: OnboardingCoordinator
-    /// 完成 onboarding 时回调，参数是 awaken 返回的 OstrichDTO（含 mainRoomId）。
-    let onComplete: (_ ostrichDTO: OstrichDTO?) -> Void
+    /// 完成 onboarding 时回调：第一个参数是 awaken 返回的 OstrichDTO（含 mainRoomId），
+    /// 第二个参数是 awaken 失败时的错误字符串（成功为 nil）。
+    let onComplete: (_ ostrichDTO: OstrichDTO?, _ awakenError: String?) -> Void
 
-    init(client: ConvexClientProtocol, onComplete: @escaping (_ ostrichDTO: OstrichDTO?) -> Void) {
+    init(
+        client: ConvexClientProtocol,
+        onComplete: @escaping (_ ostrichDTO: OstrichDTO?, _ awakenError: String?) -> Void
+    ) {
         _coordinator = StateObject(wrappedValue: OnboardingCoordinator(client: client))
         self.onComplete = onComplete
     }
@@ -47,5 +51,5 @@ struct OnboardingFlow: View {
 }
 
 #Preview {
-    OnboardingFlow(client: MockConvexClient(), onComplete: { _ in })
+    OnboardingFlow(client: MockConvexClient(), onComplete: { _, _ in })
 }

@@ -21,6 +21,8 @@ public final class OnboardingCoordinator: ObservableObject {
     @Published public var ostrichReply: String = ""
     @Published public var ostrichDTO: OstrichDTO?
     @Published public var isAwakening = false
+    /// 最后一次 awaken 失败的错误（成功时清空）。Step8 / chatDestination 占位屏读它显示给用户。
+    @Published public var awakenError: String?
 
     // MARK: - Deps
 
@@ -67,6 +69,7 @@ public final class OnboardingCoordinator: ObservableObject {
         let trimmedName = ostrichName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? "鸵鸟" : trimmedName
 
+        awakenError = nil
         isAwakening = true
         defer { isAwakening = false }
 
@@ -83,6 +86,8 @@ public final class OnboardingCoordinator: ObservableObject {
             ostrichDTO = dto
             return dto
         } catch {
+            print("[Onboarding] awaken failed: \(error)")
+            awakenError = String(describing: error)
             return nil
         }
     }

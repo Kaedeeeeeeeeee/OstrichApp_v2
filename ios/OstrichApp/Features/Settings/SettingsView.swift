@@ -12,83 +12,80 @@ public struct SettingsView: View {
     public init() {}
 
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                OstrichColors.bodyBackground.ignoresSafeArea()
+        ZStack {
+            OstrichColors.bodyBackground.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: OstrichSpacing.m) {
-                        section(title: "鸵鸟") {
-                            row(
-                                icon: "book.closed.fill",
-                                title: "鸵鸟之书",
-                                subtitle: "回忆与记录",
-                                enabled: false
-                            ) {
-                                comingSoonMessage = "鸵鸟之书还在写。"
-                                showComingSoon = true
-                            }
-
-                            row(
-                                icon: "globe",
-                                title: "鸵鸟的世界",
-                                subtitle: "看看其他鸵鸟",
-                                enabled: false
-                            ) {
-                                comingSoonMessage = "鸵鸟世界还在搭建。"
-                                showComingSoon = true
-                            }
+            ScrollView {
+                VStack(spacing: OstrichSpacing.m) {
+                    section(title: "鸵鸟") {
+                        row(
+                            icon: "book.closed.fill",
+                            title: "鸵鸟之书",
+                            subtitle: "回忆与记录",
+                            enabled: false
+                        ) {
+                            comingSoonMessage = "鸵鸟之书还在写。"
+                            showComingSoon = true
                         }
 
-                        section(title: "终章") {
-                            NavigationLink {
-                                IfImGoneView()
-                            } label: {
-                                rowContent(
-                                    icon: "leaf.fill",
-                                    title: "如果有一天我不在了",
-                                    subtitle: "三种安排",
-                                    enabled: true
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        section(title: "应用") {
-                            row(
-                                icon: "info.circle.fill",
-                                title: "关于鸵鸟",
-                                subtitle: "v0.1.0",
-                                enabled: true
-                            ) {
-                                comingSoonMessage = "鸵鸟 v0.1.0 · 见 BLUEPRINT。"
-                                showComingSoon = true
-                            }
-
-                            row(
-                                icon: "rectangle.portrait.and.arrow.right",
-                                title: "退出登录",
-                                subtitle: nil,
-                                enabled: true,
-                                tint: OstrichColors.orangeDeep
-                            ) {
-                                comingSoonMessage = "退出登录功能开发中。"
-                                showComingSoon = true
-                            }
+                        row(
+                            icon: "globe",
+                            title: "鸵鸟的世界",
+                            subtitle: "看看其他鸵鸟",
+                            enabled: false
+                        ) {
+                            comingSoonMessage = "鸵鸟世界还在搭建。"
+                            showComingSoon = true
                         }
                     }
-                    .padding(.horizontal, OstrichSpacing.l)
-                    .padding(.vertical, OstrichSpacing.l)
+
+                    section(title: "终章") {
+                        NavigationLink {
+                            IfImGoneView()
+                        } label: {
+                            rowContent(
+                                icon: "leaf.fill",
+                                title: "如果有一天我不在了",
+                                subtitle: "三种安排",
+                                enabled: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    section(title: "应用") {
+                        row(
+                            icon: "info.circle.fill",
+                            title: "关于鸵鸟",
+                            subtitle: "v0.1.0",
+                            enabled: true
+                        ) {
+                            comingSoonMessage = "鸵鸟 v0.1.0 · 见 BLUEPRINT。"
+                            showComingSoon = true
+                        }
+
+                        row(
+                            icon: "rectangle.portrait.and.arrow.right",
+                            title: "退出登录",
+                            subtitle: nil,
+                            enabled: true,
+                            tint: OstrichColors.orangeDeep
+                        ) {
+                            comingSoonMessage = "退出登录功能开发中。"
+                            showComingSoon = true
+                        }
+                    }
                 }
+                .padding(.horizontal, OstrichSpacing.l)
+                .padding(.vertical, OstrichSpacing.l)
             }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(OstrichColors.cream, for: .navigationBar)
-            .alert("功能开发中", isPresented: $showComingSoon) {
-                Button("好") {}
-            } message: {
-                Text(comingSoonMessage)
-            }
+        }
+        .navigationTitle("设置")
+        .toolbarBackground(OstrichColors.cream, for: .navigationBar)
+        .alert("功能开发中", isPresented: $showComingSoon) {
+            Button("好") {}
+        } message: {
+            Text(comingSoonMessage)
         }
     }
 

@@ -8,6 +8,11 @@ public enum LaunchPhase: Equatable {
     case main
 }
 
+extension Notification.Name {
+    /// 占位屏「重新走一遍 onboarding」按钮发出。RootView 监听后清状态、切回 .onboarding 相位。
+    static let resetOnboarding = Notification.Name("OstrichApp.resetOnboarding")
+}
+
 struct RootView: View {
     @State private var phase: LaunchPhase = .splash
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -16,6 +21,8 @@ struct RootView: View {
     @AppStorage("mainRoomId") private var mainRoomId: String = ""
     /// 刚完成 onboarding 时置 true，MainTabView 看到后立即 push 到 Chat。
     @AppStorage("autoOpenChatOnLaunch") private var autoOpenChatOnLaunch = false
+    /// awaken 失败时的最后一条错误；占位屏读它显示给用户。空串表示无错误。
+    @AppStorage("lastAwakenError") private var lastAwakenError: String = ""
     @EnvironmentObject private var deps: AppDependency
 
     var body: some View {
@@ -27,7 +34,7 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             case .onboarding:
-                OnboardingFlow(client: deps.client) { ostrichDTO in
+                OnboardingFlow(client: deps.client) { ostrichDTO, awakenError in
                     // 持久化 awaken 拿到的 ids（即便 awaken 失败也标完成，
                     // 让用户进 main，Chat tab 占位提示）。
                     if let dto = ostrichDTO {
@@ -37,6 +44,7 @@ struct RootView: View {
                             mainRoomId = roomId
                         }
                     }
+                    lastAwakenError = awakenError ?? ""
                     autoOpenChatOnLaunch = true
                     hasCompletedOnboarding = true
                     withAnimation(.easeInOut(duration: 0.4)) {
@@ -50,6 +58,15 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onReceive(NotificationCenter.default.publisher(for: .resetOnboarding)) { _ in
+            hasCompletedOnboarding = false
+            mainRoomId = ""
+            autoOpenChatOnLaunch = false
+            lastAwakenError = ""
+            withAnimation(.easeInOut(duration: 0.4)) {
+                phase = .onboarding
+            }
+        }
     }
 }
 

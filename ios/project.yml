@@ -60,8 +60,18 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         LSRequiresIPhoneOS: true
         NSLocationWhenInUseUsageDescription: "鸵鸟需要知道你在哪个城市，好和你看同一片天空"
+        # Debug build 里 iOS app 默认连本地 Convex dev backend (npx convex dev --local)。
+        # 与 .env.local 的 CONVEX_URL 保持一致。Release build 不读这个 key（见 AppEnvironment.swift）。
+        ConvexURL: "http://127.0.0.1:3210"
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true  # 本地 Convex dev deployment
+          NSAllowsLocalNetworking: true
+          # NSAllowsLocalNetworking 在某些 iOS 版本上不覆盖 loopback；显式给 localhost/127.0.0.1 开 HTTP。
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            "127.0.0.1":
+              NSExceptionAllowsInsecureHTTPLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.v2

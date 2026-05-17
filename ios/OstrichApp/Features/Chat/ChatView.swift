@@ -26,30 +26,27 @@ public struct ChatView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                OstrichColors.bodyBackground.ignoresSafeArea()
+        ZStack {
+            OstrichColors.bodyBackground.ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    header
+            VStack(spacing: 0) {
+                header
 
-                    if viewModel.messages.isEmpty {
-                        emptyState
-                    } else {
-                        messageList
-                    }
-
-                    if let err = viewModel.errorMessage {
-                        errorBanner(err)
-                    }
-
-                    inputBar
+                if viewModel.messages.isEmpty {
+                    emptyState
+                } else {
+                    messageList
                 }
+
+                if let err = viewModel.errorMessage {
+                    errorBanner(err)
+                }
+
+                inputBar
             }
-            .navigationTitle("传心")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(OstrichColors.cream, for: .navigationBar)
         }
+        .navigationTitle("传心")
+        .toolbarBackground(OstrichColors.cream, for: .navigationBar)
         .task {
             await viewModel.loadHistory()
             viewModel.startPolling()

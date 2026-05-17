@@ -22,20 +22,17 @@ public struct DiaryView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                OstrichColors.bodyBackground.ignoresSafeArea()
+        ZStack {
+            OstrichColors.bodyBackground.ignoresSafeArea()
 
-                if viewModel.entries.isEmpty && !viewModel.isLoading {
-                    emptyState
-                } else {
-                    timeline
-                }
+            if viewModel.entries.isEmpty && !viewModel.isLoading {
+                emptyState
+            } else {
+                timeline
             }
-            .navigationTitle("日记")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(OstrichColors.cream, for: .navigationBar)
         }
+        .navigationTitle("日记")
+        .toolbarBackground(OstrichColors.cream, for: .navigationBar)
         .task {
             await viewModel.loadEntries()
         }

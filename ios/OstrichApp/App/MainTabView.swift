@@ -29,6 +29,8 @@ struct MainTabView: View {
     @AppStorage("mainRoomId") private var mainRoomId: String = ""
     /// RootView 在 onboarding 完成时置 true → MainTabView 立刻 push Chat → 用完清空。
     @AppStorage("autoOpenChatOnLaunch") private var autoOpenChatOnLaunch = false
+    /// 占位屏读这个错误展示。空串表示无错误。
+    @AppStorage("lastAwakenError") private var lastAwakenError: String = ""
 
     /// NavigationStack 路径状态。
     @State private var path: [HomeRoute] = []
@@ -62,19 +64,11 @@ struct MainTabView: View {
         }
     }
 
-    /// 传心目的地：roomId 为空（onboarding 未完成或老用户没 mainRoomId）时占位。
+    /// 传心目的地：roomId 为空（onboarding 未完成或 awaken 失败）时占位。
     @ViewBuilder
     private var chatDestination: some View {
         if mainRoomId.isEmpty {
-            VStack(spacing: OstrichSpacing.l) {
-                LiquidOstrichHeadView(size: 160)
-                    .frame(width: 200, height: 200)
-                Text("先完成 onboarding，鸵鸟才能听见你")
-                    .font(OstrichTypography.callout)
-                    .foregroundStyle(OstrichColors.ink.opacity(0.5))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OstrichColors.bodyBackground)
+            ChatEmptyPlaceholder(lastError: lastAwakenError)
         } else {
             ChatView(
                 client: deps.client,
@@ -82,6 +76,52 @@ struct MainTabView: View {
                 ostrichName: mainOstrichName.isEmpty ? "鸵鸟" : mainOstrichName
             )
         }
+    }
+}
+
+/// mainRoomId 为空时显示的占位屏：展示上次 awaken 错误（如果有）+
+/// 「重新走一遍 onboarding」按钮（发 .resetOnboarding 通知，RootView 监听）。
+private struct ChatEmptyPlaceholder: View {
+    let lastError: String
+
+    var body: some View {
+        VStack(spacing: OstrichSpacing.l) {
+            LiquidOstrichHeadView(size: 160)
+                .frame(width: 200, height: 200)
+
+            VStack(spacing: OstrichSpacing.s) {
+                Text("鸵鸟还没真正醒过来")
+                    .font(OstrichTypography.headline)
+                    .foregroundStyle(OstrichColors.ink.opacity(0.65))
+                Text("先把后端跑起来 + 走完 onboarding，它才能听见你。")
+                    .font(OstrichTypography.callout)
+                    .foregroundStyle(OstrichColors.ink.opacity(0.5))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, OstrichSpacing.xl)
+
+                if !lastError.isEmpty {
+                    Text("上次唤醒报错：\(lastError)")
+                        .font(OstrichTypography.caption)
+                        .foregroundStyle(OstrichColors.orangeDeep)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, OstrichSpacing.xl)
+                        .padding(.top, OstrichSpacing.xs)
+                }
+            }
+
+            Button {
+                NotificationCenter.default.post(name: .resetOnboarding, object: nil)
+            } label: {
+                Text("重新走一遍 onboarding")
+                    .font(OstrichTypography.callout)
+                    .foregroundStyle(OstrichColors.cream)
+                    .padding(.horizontal, OstrichSpacing.xl)
+                    .padding(.vertical, OstrichSpacing.s)
+                    .background(Capsule().fill(OstrichColors.ink))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OstrichColors.bodyBackground)
     }
 }
 
