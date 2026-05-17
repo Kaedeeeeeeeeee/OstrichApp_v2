@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// Step 9: 完成。CTA → 进入主页。
+/// Step 9: 完成。CTA → 持久化 ostrich 标识 → 进入主页。
 struct Step9FinishView: View {
+    @ObservedObject var coordinator: OnboardingCoordinator
     let onComplete: () -> Void
+
+    @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
+    @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
 
     var body: some View {
         VStack(spacing: OstrichSpacing.xl) {
@@ -23,17 +27,30 @@ struct Step9FinishView: View {
             Spacer()
 
             OstrichButton("进入鸵鸟的世界") {
-                onComplete()
+                persistAndFinish()
             }
             .padding(.horizontal, OstrichSpacing.xxl)
             .padding(.bottom, OstrichSpacing.xxl)
         }
+    }
+
+    /// 把 onboarding 拿到的鸵鸟标识写到 @AppStorage，让其他 tab (Chat 等)
+    /// 重启后能继续找到主传心室。
+    private func persistAndFinish() {
+        if let dto = coordinator.ostrichDTO {
+            mainOstrichId = dto.id
+            mainOstrichName = dto.name.isEmpty ? "鸵鸟" : dto.name
+        }
+        onComplete()
     }
 }
 
 #Preview {
     ZStack {
         OstrichColors.bodyBackground.ignoresSafeArea()
-        Step9FinishView(onComplete: {})
+        Step9FinishView(
+            coordinator: OnboardingCoordinator(client: MockConvexClient()),
+            onComplete: {}
+        )
     }
 }
