@@ -7,6 +7,9 @@ struct Step9FinishView: View {
 
     @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
     @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
+    /// 主传心室 id (来自 /api/awaken 响应)。ChatView 用它作 roomId。
+    /// 与 ostrichId 是不同表 (chat_rooms vs ostriches)，不能混用。
+    @AppStorage("mainRoomId") private var mainRoomId: String = ""
 
     var body: some View {
         VStack(spacing: OstrichSpacing.xl) {
@@ -40,6 +43,10 @@ struct Step9FinishView: View {
         if let dto = coordinator.ostrichDTO {
             mainOstrichId = dto.id
             mainOstrichName = dto.name.isEmpty ? "鸵鸟" : dto.name
+            // mainRoomId 仅 /api/awaken 响应里有，其他 endpoint 返回的 OstrichDTO 没这字段
+            if let roomId = dto.mainRoomId, !roomId.isEmpty {
+                mainRoomId = roomId
+            }
         }
         onComplete()
     }
