@@ -1,18 +1,19 @@
 import SwiftUI
 
-/// Step 5: 选定蛋旋转一圈 → 狗牙状裂缝撑开 → 替换为 LiquidOstrichHeadView。耗时 ~2.5s。
+/// Step 5: 蛋旋转 → 沿狗牙状中线裂成上下两半（上半上移、下半下移）→ 鸵鸟出现。耗时 ~2.5s。
 struct Step5EggHatchView: View {
     @ObservedObject var coordinator: OnboardingCoordinator
 
     @State private var rotation: Double = 0
-    @State private var crackOpacity: Double = 0
-    @State private var crackHeight: CGFloat = 0
+    /// 两半各向相反方向位移的距离。0 = 紧贴成完整蛋形。
+    @State private var separation: CGFloat = 0
     @State private var eggScale: CGFloat = 1
     @State private var ostrichOpacity: Double = 0
 
-    /// 蛋视觉尺寸。crack 高度按它的比例插值。
     private let eggWidth: CGFloat = 220
     private let eggHeight: CGFloat = 305  // aspect 0.72
+    private let toothCount = 9
+    private let toothDepth: CGFloat = 22
 
     var body: some View {
         VStack(spacing: OstrichSpacing.xl) {
@@ -20,28 +21,34 @@ struct Step5EggHatchView: View {
 
             ZStack {
                 if let egg = coordinator.selectedEgg {
-                    // 蛋本体：EggShape + 斑点（与 Step4 风格一致）
-                    EggShape()
-                        .fill(egg.primary)
-                        .overlay(
-                            EggShape()
-                                .stroke(OstrichColors.ink.opacity(0.1), lineWidth: 1)
-                        )
-                        .overlay(
-                            EggHatchSpeckles(color: egg.secondary)
-                                .clipShape(EggShape())
-                        )
-                        .frame(width: eggWidth, height: eggHeight)
-                        .rotationEffect(.degrees(rotation))
-                        .scaleEffect(eggScale)
-                        .opacity(1.0 - ostrichOpacity)
+                    // 两半蛋同源（颜色 + 斑点），用上/下半 mask 切开。
+                    // 旋转和缩放共同应用到 ZStack 让两半作为整体保持配准。
+                    ZStack {
+                        // 上半（向上位移）
+                        eggBody(for: egg)
+                            .mask(
+                                EggHalfMaskShape(
+                                    isTop: true,
+                                    toothCount: toothCount,
+                                    toothDepth: toothDepth
+                                )
+                            )
+                            .offset(y: -separation)
 
-                    // 狗牙状裂缝：横穿蛋中部的锯齿带。撑开时高度从 0 增长，露出背景色。
-                    // 宽度比蛋略窄 (×0.92) 让锯齿不会超出蛋的侧缘。
-                    EggCrackShape(toothCount: 9, peakDepth: 0.55)
-                        .fill(OstrichColors.bodyBackground)
-                        .frame(width: eggWidth * 0.92, height: crackHeight)
-                        .opacity(crackOpacity)
+                        // 下半（向下位移）
+                        eggBody(for: egg)
+                            .mask(
+                                EggHalfMaskShape(
+                                    isTop: false,
+                                    toothCount: toothCount,
+                                    toothDepth: toothDepth
+                                )
+                            )
+                            .offset(y: separation)
+                    }
+                    .rotationEffect(.degrees(rotation))
+                    .scaleEffect(eggScale)
+                    .opacity(1.0 - ostrichOpacity)
                 }
 
                 LiquidOstrichHeadView(size: 260)
@@ -60,6 +67,21 @@ struct Step5EggHatchView: View {
         }
     }
 
+    /// 单个蛋（颜色 + 描边 + 斑点）。两半共用，由 mask 切上下。
+    @ViewBuilder
+    private func eggBody(for egg: EggArchetype) -> some View {
+        EggShape()
+            .fill(egg.primary)
+            .overlay(
+                EggShape().stroke(OstrichColors.ink.opacity(0.1), lineWidth: 1)
+            )
+            .overlay(
+                EggHatchSpeckles(color: egg.secondary)
+                    .clipShape(EggShape())
+            )
+            .frame(width: eggWidth, height: eggHeight)
+    }
+
     private func runHatchSequence() async {
         // Stage 1 (0 - 1.0s): 旋转一圈
         withAnimation(.easeInOut(duration: 1.0)) {
@@ -67,15 +89,14 @@ struct Step5EggHatchView: View {
         }
         try? await Task.sleep(nanoseconds: 1_000_000_000)
 
-        // Stage 2 (1.0 - 2.0s): 狗牙裂缝撑开
+        // Stage 2 (1.0 - 2.0s): 两半沿狗牙线分开，向相反方向位移
         withAnimation(.easeOut(duration: 0.9)) {
-            crackOpacity = 1.0
-            crackHeight = 70  // 裂缝中间空隙撑到 70pt 高
-            eggScale = 1.08
+            separation = 36   // 上下各偏 36pt，总间距 72pt
+            eggScale = 1.05
         }
         try? await Task.sleep(nanoseconds: 900_000_000)
 
-        // Stage 3 (2.0 - 2.5s): 鸵鸟显现 + 蛋淡出
+        // Stage 3 (2.0 - 2.5s): 鸵鸟显现 + 两半淡出
         withAnimation(.spring(response: 0.5, dampingFraction: 0.65)) {
             ostrichOpacity = 1.0
         }
@@ -85,50 +106,54 @@ struct Step5EggHatchView: View {
     }
 }
 
-/// 横向锯齿带 —— 上下边都是三角牙齿，中间是空隙。
-/// 视觉效果：蛋壳沿中线裂开，上下半各 N 颗向中心方向的尖牙。
-struct EggCrackShape: Shape {
-    /// 上半 / 下半各有多少颗牙齿。
+/// 上半 / 下半 mask 矩形，分界线是横向狗牙锯齿。
+/// 用 `.mask(EggHalfMaskShape(isTop: true, ...))` 切到 EggShape 上得到上半蛋。
+struct EggHalfMaskShape: Shape {
+    /// true = 保留上半区（mask 在 y < midY 的矩形 + 锯齿底边伸入下半）
+    /// false = 保留下半区（mask 在 y > midY 的矩形 + 锯齿顶边伸入上半）
+    let isTop: Bool
     let toothCount: Int
-    /// 牙齿尖端伸入空隙的比例 (0..1)。1.0 = 牙尖触碰中线。
-    let peakDepth: CGFloat
+    /// 锯齿牙尖伸入对面半区的深度（pt）。
+    let toothDepth: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let w = rect.width
-        let h = rect.height
         let midY = rect.midY
-        let halfH = h / 2
         let toothW = w / CGFloat(toothCount)
-        let peakOffset = halfH * peakDepth
 
-        // 上边：从左上角开始，沿牙齿轮廓走到右上角
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        for i in 0..<toothCount {
-            let baseX = rect.minX + CGFloat(i) * toothW
-            let tipX = baseX + toothW / 2
-            // 牙尖向下伸（向 midY 方向）
-            path.addLine(to: CGPoint(x: tipX, y: midY - (halfH - peakOffset)))
-            path.addLine(to: CGPoint(x: baseX + toothW, y: rect.minY))
+        if isTop {
+            // 上半 mask：覆盖 y ∈ [0, midY] + 锯齿牙尖朝下伸入对面
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: w, y: 0))
+            path.addLine(to: CGPoint(x: w, y: midY))
+            // 从右往左走狗牙边（牙尖向下）
+            for i in stride(from: toothCount - 1, through: 0, by: -1) {
+                let baseRightX = CGFloat(i + 1) * toothW
+                let tipX = baseRightX - toothW / 2
+                path.addLine(to: CGPoint(x: tipX, y: midY + toothDepth))
+                path.addLine(to: CGPoint(x: CGFloat(i) * toothW, y: midY))
+            }
+            path.closeSubpath()
+        } else {
+            // 下半 mask：覆盖 y ∈ [midY, height] + 锯齿牙尖朝上伸入对面
+            path.move(to: CGPoint(x: 0, y: midY))
+            // 从左往右走狗牙边（牙尖向上）—— 与上半的牙形互补，错开
+            for i in 0..<toothCount {
+                let baseLeftX = CGFloat(i) * toothW
+                let tipX = baseLeftX + toothW / 2
+                path.addLine(to: CGPoint(x: tipX, y: midY - toothDepth))
+                path.addLine(to: CGPoint(x: CGFloat(i + 1) * toothW, y: midY))
+            }
+            path.addLine(to: CGPoint(x: w, y: rect.maxY))
+            path.addLine(to: CGPoint(x: 0, y: rect.maxY))
+            path.closeSubpath()
         }
-
-        // 右下角
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-
-        // 下边：从右下走回左下，牙尖向上伸
-        for i in stride(from: toothCount - 1, through: 0, by: -1) {
-            let baseRightX = rect.minX + CGFloat(i + 1) * toothW
-            let tipX = baseRightX - toothW / 2
-            path.addLine(to: CGPoint(x: tipX, y: midY + (halfH - peakOffset)))
-            path.addLine(to: CGPoint(x: rect.minX + CGFloat(i) * toothW, y: rect.maxY))
-        }
-
-        path.closeSubpath()
         return path
     }
 }
 
-/// 与 Step4 EggSpeckles 同形 — 但放在私有作用域避免 cross-file private 冲突。
+/// 蛋上的副色斑点，与 Step4 EggSpeckles 同形（私有副本避免跨文件 private 冲突）。
 private struct EggHatchSpeckles: View {
     let color: Color
 
