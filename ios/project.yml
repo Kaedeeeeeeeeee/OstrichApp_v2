@@ -40,6 +40,10 @@ targets:
       - path: OstrichApp/Resources
         buildPhase: resources
         optional: true
+    entitlements:
+      path: OstrichApp/OstrichApp.entitlements
+      properties:
+        com.apple.developer.weatherkit: true
     info:
       path: OstrichApp/Info.plist
       properties:
@@ -51,7 +55,7 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         CFBundleURLTypes:
-          - CFBundleURLName: com.ostrich.app
+          - CFBundleURLName: com.ostrich.v2
             CFBundleURLSchemes: [ostrich]
         ITSAppUsesNonExemptEncryption: false
         LSRequiresIPhoneOS: true
@@ -60,7 +64,7 @@ targets:
           NSAllowsLocalNetworking: true  # 本地 Convex dev deployment
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.v2
         PRODUCT_NAME: 鸵鸟
         # Swift module 必须用 ASCII 名（@testable import OstrichApp）。
         # 不显式设置时 PRODUCT_MODULE_NAME 会跟随 PRODUCT_NAME = "鸵鸟"，
@@ -82,7 +86,7 @@ targets:
       - target: OstrichApp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.v2.tests
         GENERATE_INFOPLIST_FILE: "YES"
         # PRODUCT_NAME 是中文 “鸵鸟”，所以 .app 包名也是 “鸵鸟.app/鸵鸟”。
         # xcodegen 默认按 target 名给 TEST_HOST，需要显式覆盖。
@@ -99,7 +103,7 @@ targets:
       - target: OstrichApp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.app.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.ostrich.v2.uitests
         GENERATE_INFOPLIST_FILE: "YES"
 
 schemes:

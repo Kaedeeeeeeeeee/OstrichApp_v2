@@ -8,6 +8,7 @@ import SwiftUI
 struct HomeView: View {
 
     @EnvironmentObject private var deps: AppDependency
+    @StateObject private var weather = WeatherViewModel()
 
     var body: some View {
         ZStack {
@@ -48,10 +49,10 @@ struct HomeView: View {
                 Text(HomeView.formattedDate())
                     .font(OstrichTypography.callout)
                     .foregroundStyle(OstrichColors.ink)
-                // TODO: WeatherKit 接入后替换 mock 文案。
-                Text("今天东京晴 23°")
+                Text(weather.displayString)
                     .font(OstrichTypography.caption)
                     .foregroundStyle(OstrichColors.ink.opacity(0.5))
+                    .task { await weather.refresh() }
             }
             Spacer()
             Text("在一起 1 天")
