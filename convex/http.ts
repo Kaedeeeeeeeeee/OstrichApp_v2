@@ -163,6 +163,7 @@ type OstrichRow = {
     reason: string;
     decidedAt: number;
   };
+  socializingWith?: Id<"ostriches">;
 };
 
 function toOstrichDTO(o: OstrichRow): Record<string, unknown> {
@@ -453,6 +454,119 @@ export const _listDiaryByOstrich = internalQueryGeneric({
   },
 });
 
+/**
+ * GET /api/diary/timeline 的聚合 query。
+ *
+ * 返回 3 类条目（kind 字段区分）：
+ *   - "diary"   : diary_entries 表（可能 redacted）
+ *   - "thought" : ostrich_thoughts 表 status="done" 的（用户头顶气泡历史）
+ *   - "visited" : 由 thoughts.locationName 的"变化点"合成 —— 相邻两条 thought
+ *                 locationName 不同时，产生一条 "刚到 X" entry。无需额外表。
+ *
+ * 全部按 timestamp 倒序合并，cap 默认 60 条。
+ */
+export const _listTimelineForOstrich = internalQueryGeneric({
+  args: {
+    ostrichId: v.id("ostriches"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx: QueryCtx, args) => {
+    const cap = Math.min(args.limit ?? 60, 200);
+
+    // 1. diary entries (升序拉、后面合并时再倒序)
+    const diaries = await ctx.db
+      .query("diary_entries")
+      .withIndex("by_ostrich_timestamp", (q) => q.eq("ostrichId", args.ostrichId))
+      .order("desc")
+      .take(cap);
+
+    // 2. thoughts (done 状态)
+    const allThoughts = await ctx.db
+      .query("ostrich_thoughts")
+      .withIndex("by_ostrich_createdAt", (q) => q.eq("ostrichId", args.ostrichId))
+      .order("desc")
+      .take(cap * 2); // 多拉点用来合 visited
+    const thoughts = allThoughts.filter((t) => t.status === "done");
+
+    // 3. visited: 扫 thoughts（按时间升序）找 locationName 变化点
+    //    thoughts 当前是 desc，反转一下再扫。
+    const visited: Array<{ timestamp: number; locationName: string; thoughtId: string }> = [];
+    const thoughtsAsc = [...thoughts].reverse();
+    let lastLoc: string | null = null;
+    for (const t of thoughtsAsc) {
+      if (t.locationName !== lastLoc && t.locationName.length > 0) {
+        visited.push({
+          timestamp: t.createdAt,
+          locationName: t.locationName,
+          thoughtId: t._id as unknown as string,
+        });
+        lastLoc = t.locationName;
+      }
+    }
+
+    // 4. 合并三类 → 倒序 → cap
+    type Entry =
+      | {
+          kind: "diary";
+          id: string;
+          timestamp: number;
+          content: string;
+          visibility: string;
+          redactionReason?: string;
+          locationName?: string;
+          encounteredOstrichId?: string;
+        }
+      | {
+          kind: "thought";
+          id: string;
+          timestamp: number;
+          content: string;
+          locationName: string;
+          activityContext: string;
+        }
+      | {
+          kind: "visited";
+          id: string;
+          timestamp: number;
+          locationName: string;
+        };
+
+    const entries: Entry[] = [];
+    for (const d of diaries) {
+      entries.push({
+        kind: "diary",
+        id: d._id as unknown as string,
+        timestamp: d.timestamp,
+        content: d.content,
+        visibility: d.visibility,
+        redactionReason: d.redactionReason,
+        locationName: d.location?.friendlyName,
+        encounteredOstrichId: d.encounteredOstrichId as unknown as string | undefined,
+      });
+    }
+    for (const t of thoughts) {
+      entries.push({
+        kind: "thought",
+        id: t._id as unknown as string,
+        timestamp: t.createdAt,
+        content: t.content,
+        locationName: t.locationName,
+        activityContext: t.activityContext,
+      });
+    }
+    for (const v of visited) {
+      entries.push({
+        kind: "visited",
+        id: `visited-${v.thoughtId}`,
+        timestamp: v.timestamp,
+        locationName: v.locationName,
+      });
+    }
+    entries.sort((a, b) => b.timestamp - a.timestamp);
+    return entries.slice(0, cap);
+  },
+});
+
 export const _confirmAddPerson = internalMutationGeneric({
   args: {
     ownerId: v.id("users"),
@@ -688,6 +802,19 @@ http.route({
         await ctx.scheduler.runAfter(0, makeFunctionReference<"action">("wander:decideNextMove"), {
           ostrichId: ostrich._id,
         } as never);
+      }
+      // 保底撮合：若 24h 内自己相遇 < 3 次，fire-and-forget 触发一次 detectEncounters。
+      // 这样用户每次打开 wander tab 都有较大概率立刻看到一次相遇（每天 ≤ 5 次上限会兜住）。
+      const todayMet = (await ctx.runQuery(
+        makeFunctionReference<"query">("encounters:_countEncountersToday") as never,
+        { ostrichId: ostrich._id } as never,
+      )) as number;
+      if (todayMet < 3) {
+        await ctx.scheduler.runAfter(
+          0,
+          makeFunctionReference<"action">("encounters:detectEncounters"),
+          {} as never,
+        );
       }
       return okResponse({ ok: true });
     });
@@ -988,18 +1115,113 @@ http.route({
   }),
 });
 
+/**
+ * POST /api/diary/requestUnlock
+ *
+ * 用户点灰色日记 → 请求对方主人放开。
+ *   - 对方鸵鸟是 NPC：scheduler.runAfter(1-2 天 random) 自动 approve
+ *   - 对方是真用户：写 pending 等对方 App 里授权（P3 未做对方 iOS UI，
+ *     当前实质只对 NPC 起效；真用户场景留 P4）
+ *
+ * iOS 端继续 3s polling /api/diary/unlockStatus 直到 status=approved → reveal。
+ */
 http.route({
   path: "/api/diary/requestUnlock",
   method: "POST",
-  handler: httpActionGeneric(async (_ctx, request) => {
+  handler: httpActionGeneric(async (ctx, request) => {
     return withErrorEnvelope(async () => {
-      requireAuth(request);
+      const ostrich = await loadCurrentOstrich(ctx, request);
       const body = await parseJsonBody<{ diaryEntryId?: string }>(request);
       if (typeof body.diaryEntryId !== "string") {
         throw new HttpError("BAD_REQUEST", "Missing diaryEntryId");
       }
-      // Phase 1：固定 pending（真实策略留 Phase 2）
-      return okResponse({ status: "pending" });
+      const result = (await ctx.runMutation(
+        makeFunctionReference<"mutation">("http:_createUnlockRequest") as never,
+        {
+          diaryEntryId: body.diaryEntryId,
+          fromOstrichId: ostrich._id,
+        } as never,
+      )) as { status: string; toOstrichId?: string; isNPCTarget?: boolean; requestId?: string };
+
+      // 如果对方是 NPC，立刻调度自动通过（1-2 天延迟，让"对方在考虑"的叙事感成立）
+      if (result.isNPCTarget && result.requestId) {
+        const delayMs = DAY_MS * (1 + Math.random()); // 1-2 天
+        await ctx.scheduler.runAfter(
+          delayMs,
+          makeFunctionReference<"mutation">("http:_autoApproveUnlock"),
+          { requestId: result.requestId } as never,
+        );
+      }
+      return okResponse({ status: result.status });
+    });
+  }),
+});
+
+/**
+ * GET /api/diary/unlockStatus?diaryEntryId=X
+ *
+ * iOS polling 用。返回最新的 unlock_request 状态 + diary 当前 visibility。
+ * approved → iOS 自动刷新 entries 看到完整内容。
+ */
+http.route({
+  path: "/api/diary/unlockStatus",
+  method: "GET",
+  handler: httpActionGeneric(async (ctx, request) => {
+    return withErrorEnvelope(async () => {
+      requireAuth(request);
+      const url = new URL(request.url);
+      const diaryEntryId = url.searchParams.get("diaryEntryId");
+      if (!diaryEntryId) {
+        throw new HttpError("BAD_REQUEST", "Missing diaryEntryId");
+      }
+      const result = (await ctx.runQuery(
+        makeFunctionReference<"query">("http:_getUnlockStatus") as never,
+        { diaryEntryId } as never,
+      )) as { status: string; visibility: string };
+      return okResponse(result);
+    });
+  }),
+});
+
+/**
+ * GET /api/diary/timeline
+ *
+ * 聚合鸵鸟的完整时间线：日记 + 头顶 thought 历史 + 去过的 POI 节点。
+ * iOS DiaryView 用这个数据源（wander tab 右上角入口）。
+ *
+ * Response data:
+ *   { entries: Array<TimelineEntryDTO> }  // 已按 timestamp 倒序
+ */
+http.route({
+  path: "/api/diary/timeline",
+  method: "GET",
+  handler: httpActionGeneric(async (ctx, request) => {
+    return withErrorEnvelope(async () => {
+      const ostrich = await loadCurrentOstrich(ctx, request);
+      const url = new URL(request.url);
+      const limitParam = url.searchParams.get("limit");
+      const limit = limitParam ? Math.max(1, Math.min(200, parseInt(limitParam, 10) || 60)) : 60;
+      const entries = (await ctx.runQuery(
+        makeFunctionReference<"query">("http:_listTimelineForOstrich") as never,
+        { ostrichId: ostrich._id, limit } as never,
+      )) as Array<{
+        kind: "diary" | "thought" | "visited";
+        id: string;
+        timestamp: number;
+        content?: string;
+        visibility?: string;
+        redactionReason?: string;
+        locationName?: string;
+        encounteredOstrichId?: string;
+        activityContext?: string;
+      }>;
+      // 转成 ISO 字符串给 iOS（统一约定）
+      return okResponse({
+        entries: entries.map((e) => ({
+          ...e,
+          timestamp: new Date(e.timestamp).toISOString(),
+        })),
+      });
     });
   }),
 });
@@ -1058,6 +1280,20 @@ http.route({
             startedAt: new Date(ostrich.walkingRoute.startedAt).toISOString(),
           }
         : undefined;
+
+      // 鸵鸟正在跟另一只 socializing 时，把对方名字带给 iOS 显示 dialog bubble。
+      // iOS LocalView speech bubble 优先级：socializing > loading > intention。
+      let currentEncounter: { partnerName: string } | undefined;
+      if (ostrich.currentActivity === "socializing" && ostrich.socializingWith) {
+        const partner = (await ctx.runQuery(
+          makeFunctionReference<"query">("http:_getOstrichById") as never,
+          { ostrichId: ostrich.socializingWith } as never,
+        )) as { name: string } | null;
+        if (partner) {
+          currentEncounter = { partnerName: partner.name };
+        }
+      }
+
       return okResponse({
         ostrich: ostrichPoint,
         nearby: [],
@@ -1065,6 +1301,7 @@ http.route({
         destinationName: ostrich.currentIntention?.destinationName,
         destinationCategory: ostrich.currentIntention?.destinationCategory,
         reason: ostrich.currentIntention?.reason,
+        currentEncounter,
       });
     });
   }),

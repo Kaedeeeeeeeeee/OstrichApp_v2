@@ -35,6 +35,8 @@ public enum Endpoints {
     // 1.5 日记
     public static let diary = "/api/diary"
     public static let requestUnlock = "/api/diary/requestUnlock"
+    /// 聚合时间线：diary + thought + visited POI，wander tab 右上角入口用
+    public static let diaryTimeline = "/api/diary/timeline"
 
     // 1.6 地图
     public static let mapGod = "/api/map/godView"

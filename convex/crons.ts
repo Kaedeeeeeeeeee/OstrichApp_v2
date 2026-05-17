@@ -3,7 +3,7 @@
 // 频率：
 //   - tickAllOstriches: Demo 阶段 10s（让录屏时鸵鸟能看见动），ship 调回 1min
 //   - decideNextMove: 15min
-//   - detectEncounters: 5min
+//   - detectEncounters: 30min（密度上限 5 次/天/鸵鸟；wanderStart 24h 内 < 3 时保底触发）
 //   - generateDailyDiary: 每天 22:00 JST = 13:00 UTC
 //   - nightlyReflection: 每天 03:00 JST = 18:00 UTC
 //   - maintenanceReachOut: 周一 10:00 JST = 01:00 UTC
@@ -29,7 +29,7 @@ crons.interval(
 
 crons.interval(
   "detectEncounters",
-  { minutes: 5 },
+  { minutes: 30 },
   makeFunctionReference<"action">("encounters:detectEncounters"),
 );
 

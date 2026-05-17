@@ -352,11 +352,66 @@ public struct DiaryListResponseDTO: Codable, Equatable {
     }
 }
 
+/// `/api/diary/timeline` 单条目。kind 区分三类，相关字段按需填。
+/// - kind="diary":   content + visibility (+ redactionReason / locationName / encounteredOstrichId)
+/// - kind="thought": content + locationName + activityContext
+/// - kind="visited": locationName (合成条目，content 空)
+public struct TimelineEntryDTO: Codable, Equatable, Identifiable {
+    public let kind: String
+    public let id: String
+    public let timestamp: String
+    public let content: String?
+    public let visibility: String?
+    public let redactionReason: String?
+    public let locationName: String?
+    public let encounteredOstrichId: String?
+    public let activityContext: String?
+
+    public init(
+        kind: String,
+        id: String,
+        timestamp: String,
+        content: String? = nil,
+        visibility: String? = nil,
+        redactionReason: String? = nil,
+        locationName: String? = nil,
+        encounteredOstrichId: String? = nil,
+        activityContext: String? = nil
+    ) {
+        self.kind = kind
+        self.id = id
+        self.timestamp = timestamp
+        self.content = content
+        self.visibility = visibility
+        self.redactionReason = redactionReason
+        self.locationName = locationName
+        self.encounteredOstrichId = encounteredOstrichId
+        self.activityContext = activityContext
+    }
+}
+
+public struct DiaryTimelineResponseDTO: Codable, Equatable {
+    public let entries: [TimelineEntryDTO]
+
+    public init(entries: [TimelineEntryDTO]) {
+        self.entries = entries
+    }
+}
+
 public struct MapGodViewResponseDTO: Codable, Equatable {
     public let cells: [MapCellSummaryDTO]
 
     public init(cells: [MapCellSummaryDTO]) {
         self.cells = cells
+    }
+}
+
+/// 鸵鸟当前正在跟另一只鸵鸟相遇聊天。LocalView speech bubble 显示 dialog 态。
+public struct CurrentEncounterDTO: Codable, Equatable {
+    public let partnerName: String
+
+    public init(partnerName: String) {
+        self.partnerName = partnerName
     }
 }
 
@@ -375,6 +430,8 @@ public struct MapLocalViewResponseDTO: Codable, Equatable {
     public let destinationCategory: String?
     /// LLM 给出的"为什么想去"（fallback 时是 "想随便走走"）。
     public let reason: String?
+    /// 仅 ostrich.activity == "socializing" 时填，对方鸵鸟名字。
+    public let currentEncounter: CurrentEncounterDTO?
 
     public init(
         ostrich: MapPointDTO,
@@ -382,7 +439,8 @@ public struct MapLocalViewResponseDTO: Codable, Equatable {
         route: PolylineDTO? = nil,
         destinationName: String? = nil,
         destinationCategory: String? = nil,
-        reason: String? = nil
+        reason: String? = nil,
+        currentEncounter: CurrentEncounterDTO? = nil
     ) {
         self.ostrich = ostrich
         self.nearby = nearby
@@ -390,6 +448,7 @@ public struct MapLocalViewResponseDTO: Codable, Equatable {
         self.destinationName = destinationName
         self.destinationCategory = destinationCategory
         self.reason = reason
+        self.currentEncounter = currentEncounter
     }
 }
 

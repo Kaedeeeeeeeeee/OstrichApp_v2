@@ -18,16 +18,40 @@ struct GodViewView: View {
     let ostrichCount: Int
     let destinationName: String?
     let onRecall: () -> Void
+    /// 右上角日记按钮回调。点击进入 DiaryView 看鸵鸟去过哪 / 想过啥 / 遇见过谁。
+    let onOpenDiary: () -> Void
 
     var body: some View {
-        VStack {
-            topCaption
-                .padding(.top, OstrichSpacing.xl)
-            Spacer()
-            recallButton
-                .padding(.horizontal, OstrichSpacing.xxl)
-                .padding(.bottom, OstrichSpacing.xxl + 8)
+        ZStack(alignment: .top) {
+            VStack {
+                topCaption
+                    .padding(.top, OstrichSpacing.xl)
+                Spacer()
+                recallButton
+                    .padding(.horizontal, OstrichSpacing.xxl)
+                    .padding(.bottom, OstrichSpacing.xxl + 8)
+            }
+            HStack {
+                Spacer()
+                diaryButton
+                    .padding(.trailing, OstrichSpacing.l)
+                    .padding(.top, OstrichSpacing.xl)
+            }
         }
+    }
+
+    private var diaryButton: some View {
+        Button(action: onOpenDiary) {
+            Image(systemName: "book.closed.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(OstrichColors.ink)
+                .frame(width: 40, height: 40)
+                .background(
+                    Circle().fill(OstrichColors.cream.opacity(0.95))
+                )
+                .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+        }
+        .accessibilityLabel("打开日记")
     }
 
     private var topCaption: some View {
@@ -77,7 +101,7 @@ struct GodViewView: View {
 #Preview("no intention") {
     ZStack {
         Color.gray.ignoresSafeArea()
-        GodViewView(ostrichCount: 24, destinationName: nil, onRecall: {})
+        GodViewView(ostrichCount: 24, destinationName: nil, onRecall: {}, onOpenDiary: {})
     }
 }
 
@@ -87,7 +111,8 @@ struct GodViewView: View {
         GodViewView(
             ostrichCount: 24,
             destinationName: "%%% Coffee 表参道店",
-            onRecall: {}
+            onRecall: {},
+            onOpenDiary: {}
         )
     }
 }

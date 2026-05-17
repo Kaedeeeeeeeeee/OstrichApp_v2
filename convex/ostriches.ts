@@ -1,10 +1,12 @@
-// Ostrich mutations: placeholder + awakenOstrich。
+// Ostrich mutations: placeholder + awakenOstrich + seedNPCs。
 //
 // 注: 这里直接用 mutationGeneric + DataModelFromSchemaDefinition，
 // 避免依赖 convex/_generated（codegen 需要 deployment URL，CI / worktree 没有）。
 // 当 _generated 生成后可以平滑切换到 `from "./_generated/server"`。
 
 import {
+  internalMutationGeneric,
+  makeFunctionReference,
   mutationGeneric,
   type DataModelFromSchemaDefinition,
   type GenericMutationCtx,
@@ -12,6 +14,7 @@ import {
 import { v } from "convex/values";
 import schema from "./schema";
 import { getEggPrompt } from "./lib/eggs";
+import { NPC_SEEDS } from "./lib/npcSeed";
 
 type DataModel = DataModelFromSchemaDefinition<typeof schema>;
 type MutationCtx = GenericMutationCtx<DataModel>;
@@ -165,5 +168,100 @@ export const awakenOstrich = mutationGeneric({
     });
 
     return { ostrichId, mainRoomId, firstMessageId, ownerId };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// seedNPCs · 批量创建 20 只 NPC 鸵鸟 + 虚构主人
+//
+// 设计：
+//   - 幂等：先查 isNPC=true 的 ostriches，>= NPC_SEEDS.length 就跳过
+//   - 涩谷 5km 范围随机分布（±0.045 deg）
+//   - 直接 state="wandering" + 错峰 0..120s 后 schedule 第一次 decideNextMove
+//   - 真用户那侧不需要这个：onboarding 创建后用户进 wander tab 才启动
+//
+// 触发：手动 `npx convex run ostriches:seedNPCs '{}'`（demo 阶段足够）
+// ─────────────────────────────────────────────────────────────
+
+const SHIBUYA_CENTER_LAT = 35.6595;
+const SHIBUYA_CENTER_LNG = 139.7005;
+const NPC_SPREAD_DEG = 0.045; // ~5km
+
+export const seedNPCs = internalMutationGeneric({
+  args: {},
+  handler: async (ctx: MutationCtx) => {
+    // 幂等：已有足够 NPC 直接返回
+    const existing = await ctx.db.query("ostriches").collect();
+    const existingNPCs = existing.filter((o) => o.isNPC === true);
+    if (existingNPCs.length >= NPC_SEEDS.length) {
+      return { skipped: true, existing: existingNPCs.length };
+    }
+
+    const now = Date.now();
+    const created: Array<string> = [];
+
+    for (const seed of NPC_SEEDS) {
+      // 1. 创建 NPC user
+      const ownerId = await ctx.db.insert("users", {
+        appleId: `npc-${seed.archetype}-${now}-${seed.ostrichName}`,
+        name: seed.userName,
+        mbti: seed.userMbti,
+        zodiac: seed.userZodiac,
+        bio: seed.userBio,
+        isNPC: true,
+        createdAt: now,
+        status: "alive",
+      });
+
+      // 2. 涩谷区随机坐标
+      const lat = SHIBUYA_CENTER_LAT + (Math.random() - 0.5) * 2 * NPC_SPREAD_DEG;
+      const lng = SHIBUYA_CENTER_LNG + (Math.random() - 0.5) * 2 * NPC_SPREAD_DEG;
+
+      // 3. 创建 NPC 鸵鸟（直接 wandering 状态，跳过 awake → user 触发的环节）
+      const ostrichId = await ctx.db.insert("ostriches", {
+        ownerId,
+        eggType: seed.eggType,
+        name: seed.ostrichName,
+        isNPC: true,
+        personality: {
+          eggId: seed.eggType,
+          archetype: seed.archetype,
+          traits: [],
+          speakingStyle: "",
+          skill: "",
+        },
+        personalityDrift: {
+          learnedPreferences: [],
+          emotionalTendencies: [],
+        },
+        awakenedAt: now,
+        state: "wandering",
+        currentLocation: {
+          lat,
+          lng,
+          friendlyName: "涩谷",
+        },
+        currentActivity: "resting",
+        mood: {
+          excitement: 0.5 + Math.random() * 0.3,
+          fatigue: Math.random() * 0.2,
+          curiosity: 0.5 + Math.random() * 0.4,
+        },
+      });
+
+      await ctx.db.patch(ownerId, { ostrichId });
+
+      // 4. 错峰 0-120s 调度第一次 decideNextMove，避免 20 只同时打爆 Apple Maps
+      const delayMs = Math.floor(Math.random() * 120_000);
+      await ctx.scheduler.runAfter(
+        delayMs,
+        makeFunctionReference<"action">("wander:decideNextMove"),
+        { ostrichId } as never,
+      );
+
+      created.push(ostrichId);
+    }
+
+    return { skipped: false, created: created.length };
   },
 });
