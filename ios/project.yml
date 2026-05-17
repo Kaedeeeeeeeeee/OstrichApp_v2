@@ -61,8 +61,9 @@ targets:
         LSRequiresIPhoneOS: true
         NSLocationWhenInUseUsageDescription: "鸵鸟需要知道你在哪个城市，好和你看同一片天空"
         # Debug build 里 iOS app 默认连本地 Convex dev backend (npx convex dev --local)。
-        # 与 .env.local 的 CONVEX_URL 保持一致。Release build 不读这个 key（见 AppEnvironment.swift）。
-        ConvexURL: "http://127.0.0.1:3210"
+        # iOS REST 调用走 httpRouter，所以端口是 3211 (CONVEX_SITE_URL)，
+        # 不是 3210 (CONVEX_URL，那是 function call 端点)。详见 AppEnvironment.swift 注释 + PR #48。
+        ConvexURL: "http://127.0.0.1:3211"
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           # NSAllowsLocalNetworking 在某些 iOS 版本上不覆盖 loopback；显式给 localhost/127.0.0.1 开 HTTP。
