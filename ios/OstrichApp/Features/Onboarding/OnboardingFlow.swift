@@ -36,7 +36,7 @@ struct OnboardingFlow: View {
                 case .ostrichResponds:
                     Step8OstrichRespondsView(coordinator: coordinator)
                 case .finish:
-                    Step9FinishView(onComplete: onComplete)
+                    Step9FinishView(coordinator: coordinator, onComplete: onComplete)
                 }
             }
             .animation(.easeInOut(duration: 0.32), value: coordinator.step)
