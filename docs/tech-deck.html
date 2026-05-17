@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>鸵鸟 OstrichApp v2 · 技术架构</title>
+<style>
+  :root {
+    --cream:       #FCFEE8;
+    --cream-deep:  #F5EAB8;
+    --body-bg:     #DBD3B8;
+    --ink:         #27281D;
+    --orange:      #FC8B40;
+    --orange-deep: #CD4A0F;
+    --ruff:        #FDFEF7;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--body-bg); color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "SF Pro Rounded", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  body { scroll-snap-type: y mandatory; overflow-y: scroll; height: 100vh; }
+
+  section {
+    min-height: 100vh; padding: 80px 8vw; display: flex; flex-direction: column;
+    justify-content: center; scroll-snap-align: start;
+    border-bottom: 1px dashed rgba(39,40,29,0.10);
+  }
+  section.cream { background: linear-gradient(180deg, var(--cream) 0%, var(--cream-deep) 100%); }
+  section.dark  { background: var(--ink); color: var(--cream); }
+
+  h1 { font-size: 64px; font-weight: 800; line-height: 1.05; margin: 0 0 16px; letter-spacing: -0.01em; }
+  h2 { font-size: 40px; font-weight: 800; line-height: 1.1;  margin: 0 0 18px; letter-spacing: -0.01em; }
+  h3 { font-size: 22px; font-weight: 700; margin: 24px 0 8px; }
+  h4 { font-size: 16px; font-weight: 700; margin: 12px 0 4px; color: var(--orange-deep); letter-spacing: 0.04em; text-transform: uppercase; }
+  p, li { font-size: 17px; }
+  p { margin: 8px 0; opacity: 0.78; }
+  .lead { font-size: 22px; opacity: 0.7; max-width: 780px; font-weight: 500; }
+  .quote { font-size: 28px; font-weight: 700; line-height: 1.35; max-width: 820px; letter-spacing: -0.005em; }
+  .chip { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--ink); color: var(--cream);
+    font-size: 13px; font-weight: 700; letter-spacing: 0.04em; margin: 0 6px 6px 0; }
+  .chip.outline { background: transparent; border: 1.5px solid var(--ink); color: var(--ink); }
+  .chip.orange { background: var(--orange); }
+
+  .grid { display: grid; gap: 18px; margin-top: 24px; }
+  .grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+  .card {
+    background: var(--cream); border-radius: 22px; padding: 22px 24px;
+    box-shadow: 0 6px 14px -8px rgba(39,40,29,0.20);
+  }
+  .card h4 { margin-top: 0; }
+  .card .meta { font-size: 14px; opacity: 0.55; margin-top: 8px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 16px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid rgba(39,40,29,0.10); }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.55; }
+
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  code { background: rgba(39,40,29,0.08); padding: 2px 7px; border-radius: 5px; font-size: 15px; }
+  pre { background: var(--ink); color: var(--cream); border-radius: 16px; padding: 20px 24px;
+    overflow-x: auto; font-size: 14px; line-height: 1.6; }
+  .dark pre { background: rgba(252,254,232,0.08); }
+
+  .pill-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+
+  .footer-nav { position: fixed; bottom: 18px; right: 22px; background: var(--ink); color: var(--cream);
+    padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; opacity: 0.85;
+    box-shadow: 0 6px 14px -6px rgba(0,0,0,0.3); pointer-events: none; }
+
+  /* hero ostrich silhouette */
+  .hero { display: flex; align-items: center; gap: 60px; }
+  .hero-text { flex: 1; }
+  .hero-svg { width: 240px; flex-shrink: 0; }
+  .hero-svg svg { width: 100%; display: block; }
+
+  /* arch diagram */
+  .arch { background: var(--cream); border-radius: 20px; padding: 28px; margin-top: 24px;
+    font-family: ui-monospace, monospace; white-space: pre; font-size: 13px; line-height: 1.5;
+    overflow-x: auto; color: var(--ink); }
+
+  ul.tight { margin: 6px 0 0; padding-left: 22px; }
+  ul.tight li { margin: 4px 0; opacity: 0.85; }
+
+  /* page indicator */
+  .pageno { position: absolute; top: 32px; right: 8vw; font-size: 13px; font-weight: 700; opacity: 0.4; letter-spacing: 0.1em; }
+
+  /* metric */
+  .metric { font-size: 56px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+  .metric-label { font-size: 14px; opacity: 0.6; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<!-- 01 · COVER -->
+<section class="cream">
+  <span class="pageno">01 / 14</span>
+  <div class="hero">
+    <div class="hero-text">
+      <h1>鸵鸟 <span style="color: var(--orange-deep);">v2</span></h1>
+      <p class="lead">技术架构与系统设计速览 · 给投资人看的。<br>面向欧美/日韩市场的 AI 中介型陌生人社交 App。</p>
+      <div style="margin-top: 32px;">
+        <span class="chip">iOS / SwiftUI</span>
+        <span class="chip">Convex</span>
+        <span class="chip">Claude Sonnet 4.7</span>
+        <span class="chip">DeepSeek</span>
+        <span class="chip">Apple Maps + WeatherKit</span>
+      </div>
+    </div>
+    <div class="hero-svg">
+      <!-- 简化版液态鸵鸟头 -->
+      <svg viewBox="125 135 330 720" preserveAspectRatio="xMidYMid meet">
+        <!-- 腿 -->
+        <path d="M 300 700 L 300 850 L 320 850 L 320 700 Z" fill="#FD8D3D"/>
+        <path d="M 270 700 L 270 850 L 290 850 L 290 700 Z" fill="#FD8D3D"/>
+        <!-- 身体 -->
+        <ellipse cx="293" cy="660" rx="120" ry="80" fill="#27281D"/>
+        <!-- 颈毛 -->
+        <ellipse cx="293" cy="600" rx="50" ry="20" fill="#FDFEF7"/>
+        <!-- 脖子 -->
+        <path d="M 280 600 Q 285 480 285 380 L 305 380 Q 305 480 310 600 Z" fill="#FC8B40"/>
+        <!-- 头 -->
+        <ellipse cx="293" cy="320" rx="55" ry="55" fill="#FC8B40"/>
+        <!-- 眼睛 -->
+        <circle cx="278" cy="310" r="10" fill="#FDFDFB"/>
+        <circle cx="278" cy="312" r="5" fill="#1D1C13"/>
+        <circle cx="308" cy="310" r="10" fill="#FDFDFB"/>
+        <circle cx="308" cy="312" r="5" fill="#1D1C13"/>
+        <!-- 喙 -->
+        <path d="M 285 332 L 301 332 L 293 348 Z" fill="#CD4A0F"/>
+        <!-- 滴液 -->
+        <circle cx="320" cy="240" r="6" fill="#CD4A0F"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 02 · 产品哲学 -->
+<section>
+  <span class="pageno">02 / 14</span>
+  <h4>产品哲学</h4>
+  <p class="quote">鸵鸟<b>不是</b>被你养的电子宠物。<br>它是已经存在的智慧生命 —— 见证你，理解你，<br>但最终把你<b>送回真实的人际世界</b>。</p>
+  <div class="grid cols-3" style="margin-top: 48px;">
+    <div class="card">
+      <h4>市面 AI 社交今天的样子</h4>
+      <p>把人锁在与 AI 的虚假关系里 — 电子男友/女友、永远顺从的伙伴。</p>
+    </div>
+    <div class="card">
+      <h4>鸵鸟刻意走的路径</h4>
+      <p><b>人 → AI → 人</b>。鸵鸟在你和真实关系中间做缓冲、做翻译、做媒介，但不替代人。</p>
+    </div>
+    <div class="card">
+      <h4>核心机制</h4>
+      <p>鸵鸟自己出去溜弯、维系你的关系图谱、把你想说没说的话替你递出去。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 · 5 分钟 demo 路径 -->
+<section class="cream">
+  <span class="pageno">03 / 14</span>
+  <h2>5 分钟 demo 路径</h2>
+  <p class="lead">从冷启动到「这是一个会见证你一生的伙伴」只需要五段视觉。</p>
+  <div class="grid cols-3" style="margin-top: 32px;">
+    <div class="card">
+      <h4>0:00 – 0:15</h4>
+      <h3>液态鸵鸟出现</h3>
+      <p>整屏液态形态，simplex-noise 抖动，脖子可拖。第一眼 wow。</p>
+    </div>
+    <div class="card">
+      <h4>0:15 – 1:00</h4>
+      <h3>盲盒选蛋 + 破壳</h3>
+      <p>16 个蛋随机分发，蛋按 Bezier 真蛋型呼吸，破壳沿狗牙线裂成两半。</p>
+    </div>
+    <div class="card">
+      <h4>1:00 – 2:00</h4>
+      <h3>命名仪式 → 对话</h3>
+      <p>鸵鸟问你叫什么、你给它起名字，立刻进入跟 Sonnet 4.7 的真对话。</p>
+    </div>
+    <div class="card">
+      <h4>2:00 – 3:00</h4>
+      <h3>关系图谱涌现</h3>
+      <p>你聊到妈妈，鸵鸟自然问"我把她记下好不好"。关系节点出现在神经网络图上。</p>
+    </div>
+    <div class="card">
+      <h4>3:00 – 4:00</h4>
+      <h3>真实地图 + 遛弯</h3>
+      <p>3D 卫星图，鸵鸟在涩谷真街道走动，Look Around 街景。</p>
+    </div>
+    <div class="card">
+      <h4>4:00 – 5:00</h4>
+      <h3>灰色日记 + 「如果有一天我不在了」</h3>
+      <p>别人的故事是模糊的 → 鸵鸟带你回真实社交。设置里能看到死后游荡入口。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 · 技术栈 -->
+<section>
+  <span class="pageno">04 / 14</span>
+  <h2>技术栈速览</h2>
+  <table>
+    <thead>
+      <tr><th>层</th><th>选型</th><th>为什么</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>iOS 客户端</td><td>Swift 5.10 · SwiftUI · iOS 17+</td><td>原生 + 现代</td></tr>
+      <tr><td>矢量动画</td><td>SwiftUI Canvas · SVG Path · Simplex Noise</td><td>程序化液态感，不依赖 Lottie/Rive</td></tr>
+      <tr><td>地图渲染</td><td>Apple MapKit (3D Flyover + Look Around)</td><td>沉浸感 + 原生免费</td></tr>
+      <tr><td>地图数据(服务端)</td><td>Apple Maps Server API</td><td>与客户端 MapKit 同源数据，POI/路线，25k 免费 calls/天</td></tr>
+      <tr><td>天气</td><td>WeatherKit + CoreLocation</td><td>Apple 原生免费 500k calls/月</td></tr>
+      <tr><td>LLM</td><td>Claude Sonnet 4.7 (主) + DeepSeek (备选 via OpenAI 协议)</td><td>provider abstraction，可切换</td></tr>
+      <tr><td>后端</td><td>Convex (TypeScript)</td><td>原生多 agent 模拟支持，参考 a16z/ai-town</td></tr>
+      <tr><td>iOS ↔ 后端</td><td>HTTP REST + URLSession + 轮询</td><td>不绑 Convex Swift SDK</td></tr>
+      <tr><td>认证</td><td>Sign in with Apple (Phase 2)</td><td>App Store 必备</td></tr>
+      <tr><td>推送</td><td>APNs (鸵鸟想找你时)</td><td>不滥用通知</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 05 · 系统架构 -->
+<section class="cream">
+  <span class="pageno">05 / 14</span>
+  <h2>系统架构</h2>
+  <p class="lead">iOS 是<b>渲染层</b> + 输入采集；Convex 是<b>世界模拟器</b> + 状态权威。鸵鸟 24/7 在 Convex 上活着，与用户是否打开 App 无关。</p>
+  <div class="arch">┌─────────────────────────────────────────────────────────────┐
+│  iOS App (SwiftUI)                                          │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐                    │
+│  │主页 │ │传心 │ │图谱 │ │遛弯 │ │设置 │   NavigationStack   │
+│  └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘                    │
+│     └───────┴───────┼───────┴───────┘                       │
+│                     ▼                                       │
+│       ┌─────────────────────────────┐                       │
+│       │ ConvexClient (URLSession)   │ ◄── WeatherKit/CoreLoc│
+│       └──────────────┬──────────────┘     MapKit (rendering)│
+└──────────────────────┼──────────────────────────────────────┘
+                       │ HTTPS REST
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Convex Backend                                             │
+│  ┌──────────┐  ┌──────────┐  ┌────────────────┐             │
+│  │ http.ts  │  │  schema  │  │ crons          │             │
+│  │ 21 routes│  │  11 表   │  │ tick / decide  │             │
+│  └────┬─────┘  └──────────┘  │ encounter      │             │
+│       │                       │ reflect / diary│             │
+│       ▼                       └────────┬───────┘             │
+│  ┌────────────────────────────────────┴───┐                 │
+│  │ Agent Runtime · 5 层 prompt + 6 tools  │                 │
+│  └─────────┬─────────────────────────┬────┘                 │
+└────────────┼─────────────────────────┼──────────────────────┘
+             ▼                         ▼
+   ┌───────────────────┐    ┌────────────────────────┐
+   │  LLM 双轨          │    │ Apple Maps Server API  │
+   │  Sonnet 4.7        │    │ POI / 步行路线 / 反编码 │
+   │  DeepSeek (fallbk) │    └────────────────────────┘
+   └───────────────────┘</div>
+</section>
+
+<!-- 06 · iOS Client -->
+<section>
+  <span class="pageno">06 / 14</span>
+  <h2>iOS 客户端</h2>
+  <p class="lead">71 个 Swift 文件 · 103 单元测试 · swiftlint 0 violations。</p>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>液态鸵鸟头</h4>
+      <p>v4 HTML React 版 1:1 SwiftUI 移植。<code>TimelineView + Canvas</code> 30fps 锁帧，每帧用 Simplex Noise 重建头部顶点，脖子是程序化 Bezier 管，可拖拽延展。</p>
+      <p style="font-size: 14px; opacity: 0.55;">SimplexNoise 与 simplex-noise.js@2.4.0 在给定 seed 下输出对齐 &lt; 1e-12</p>
+    </div>
+    <div class="card">
+      <h4>Design System</h4>
+      <p>色板 / 字体 / 间距全部 token 化（来自 v4 HTML）。OstrichButton (pill 56pt)、OstrichCard、EggShape (Bezier 真蛋)、PageDots。</p>
+    </div>
+    <div class="card">
+      <h4>Features (8 个屏幕)</h4>
+      <p>Onboarding (8 步状态机) / Home / Chat / Graph (力导向 viz) / Wander (god+local) / Diary (灰色条目) / Settings / IfImGone.</p>
+    </div>
+    <div class="card">
+      <h4>Map 桥接</h4>
+      <p>UIViewRepresentable 包 MKMapView (pitch 60° satelliteFlyover)，自定义鸵鸟头 annotation, WalkingSimulator polyline 插值, MKLookAroundViewController 街景。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 07 · Convex 后端 -->
+<section class="dark">
+  <span class="pageno" style="color: var(--cream); opacity: 0.4;">07 / 14</span>
+  <h2>Convex 后端</h2>
+  <p class="lead" style="color: var(--cream); opacity: 0.7;">25 个 TS 文件 · 57 vitest · 11 张数据表 · 21 个 REST 端点。</p>
+  <div class="grid cols-2" style="margin-top: 24px;">
+    <div class="card" style="background: rgba(252,254,232,0.08); color: var(--cream);">
+      <h4 style="color: var(--orange);">Schema (11 表)</h4>
+      <p style="opacity: 0.85;">users · ostriches · memories · people · chat_rooms · messages · diary_entries · encounters · map_cells · name_cards · pending_persons</p>
+    </div>
+    <div class="card" style="background: rgba(252,254,232,0.08); color: var(--cream);">
+      <h4 style="color: var(--orange);">http.ts (21 endpoints)</h4>
+      <p style="opacity: 0.85;">/api/auth · /api/awaken · /api/chat/* · /api/graph/* · /api/diary · /api/map/* · /api/settings/* · 统一 envelope + 错误码翻译</p>
+    </div>
+    <div class="card" style="background: rgba(252,254,232,0.08); color: var(--cream);">
+      <h4 style="color: var(--orange);">Cron 任务</h4>
+      <p style="opacity: 0.85;">每 10 秒 tickAllOstriches (插值移动) · 每 15 分钟 decideNextMove (Sonnet 决策) · 每 5 分钟 detectEncounters (相遇撮合) · 每天 03:00 reflection / 22:00 diary</p>
+    </div>
+    <div class="card" style="background: rgba(252,254,232,0.08); color: var(--cream);">
+      <h4 style="color: var(--orange);">LLM 双轨</h4>
+      <p style="opacity: 0.85;"><code style="background: rgba(252,254,232,0.15); color: var(--cream);">LLM_PROVIDER=anthropic</code> 默认 Sonnet 4.7。设 <code style="background: rgba(252,254,232,0.15); color: var(--cream);">deepseek</code> 走 OpenAI SDK 调 api.deepseek.com。工具 schema 统一，分发时翻译格式。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 08 · 16 蛋人格系统 -->
+<section>
+  <span class="pageno">08 / 14</span>
+  <h2>16 蛋人格盲盒</h2>
+  <p class="lead">用户不知道会抽到谁。每个蛋是一个鲜明 archetype，体现在语调和行为上。<b>名字由用户起。</b></p>
+  <div class="grid cols-4" style="margin-top: 28px;">
+    <div class="card"><h4>STEADFAST</h4>守望者 · 慢热深情 · 过目不忘</div>
+    <div class="card"><h4>POET</h4>诗人 · 文艺感伤 · 诗化日记</div>
+    <div class="card"><h4>STRAIGHTSHOOTER</h4>直心客 · 大白话 · 翻译官</div>
+    <div class="card"><h4>CUDDLER</h4>甜心 · 软糯撒娇 · 情绪锚</div>
+    <div class="card"><h4>WORLDLY</h4>老炮 · 见多识广 · 社交达人</div>
+    <div class="card"><h4>MAVERICK</h4>鬼才 · 跳脱 · 破框者</div>
+    <div class="card"><h4>STOIC</h4>冷哲 · 一句顶十句 · 一针见血</div>
+    <div class="card"><h4>WATCHER</h4>观察者 · 敏感 · 情绪雷达</div>
+    <div class="card"><h4>HEDONIST</h4>美食家 · 享乐派 · 探店王</div>
+    <div class="card"><h4>INNOCENT</h4>童心 · 单纯 · 重新发现</div>
+    <div class="card"><h4>PROTECTOR</h4>仗义客 · 大哥 · 挺你</div>
+    <div class="card"><h4>ELDER</h4>长者 · 慢悠悠 · 十年视角</div>
+    <div class="card"><h4>MYSTIC</h4>玄学家 · 塔罗 · 占卜调剂</div>
+    <div class="card"><h4>RATIONALIST</h4>工程师 · 清单化 · 拆解者</div>
+    <div class="card"><h4>NIGHTOWL</h4>守夜人 · 凌晨陪聊 · 半夜推送</div>
+    <div class="card"><h4>SUNSHINE</h4>乐天派 · 钝感力 · 笑出来</div>
+  </div>
+</section>
+
+<!-- 09 · 5 层 Prompt -->
+<section class="cream">
+  <span class="pageno">09 / 14</span>
+  <h2>Agent Runtime · 5 层 Prompt</h2>
+  <p class="lead">Stanford <i>Generative Agents</i> 工程化范式。每次调用 LLM 都按以下顺序拼装 system prompt。</p>
+  <pre style="margin-top: 28px;">┌─ Layer 1: 鸵鸟世界观 (固定)
+│  来源: shared/prompts/world.md
+│
+├─ Layer 2: 蛋人格 (eggType 决定)
+│  来源: shared/eggs/{01..16}_*.md
+│
+├─ Layer 3: 用户基础信息 (onboarding 注入)
+│  · 用户姓名 · MBTI · 星座 · 鸵鸟的名字 · 在一起天数
+│
+├─ Layer 4: 关系图谱摘要 (people 表查询)
+│  · 最多 8 个最近活跃节点
+│  · 每节点: 名字 / 分类 / 亲密度 / 最近一句话总结
+│
+└─ Layer 5: 相关记忆 (向量检索)
+   · 加权: 0.5×recency + 0.3×importance + 0.2×relevance
+   · top 15 条</pre>
+
+  <h3 style="margin-top: 36px;">6 个工具 (LLM 自主调用)</h3>
+  <div class="pill-list">
+    <span class="chip orange">note_person</span>
+    <span class="chip orange">update_person</span>
+    <span class="chip orange">remember</span>
+    <span class="chip orange">suggest_reach_out</span>
+    <span class="chip orange">generate_name_card</span>
+    <span class="chip orange">request_to_stay_wandering</span>
+  </div>
+</section>
+
+<!-- 10 · 关系图谱 -->
+<section>
+  <span class="pageno">10 / 14</span>
+  <h2>关系图谱</h2>
+  <p class="lead">鸵鸟在对话中<b>自主</b>识别人物并请求加入图谱 —— 不是关键词匹配，是模型 tool-call。</p>
+  <div class="grid cols-2" style="margin-top: 28px;">
+    <div class="card">
+      <h4>写入流程</h4>
+      <ul class="tight">
+        <li>用户说"我妈又开始了..."</li>
+        <li>Sonnet 在生成回复同一回合调 <code>note_person({name:"妈妈", suggestedCategory:"family"})</code></li>
+        <li>写入 <code>pending_persons</code> 表 (临时)</li>
+        <li>鸵鸟在回复里自然带出"我把妈妈记下来好不好"</li>
+        <li>用户回"好"→ <code>confirmAddPerson</code> 落 <code>people</code> 表</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>力导向可视化</h4>
+      <ul class="tight">
+        <li>SwiftUI Canvas + TimelineView 30fps 手写力导向算法 ~150 行</li>
+        <li>节点斥力 + 边弹簧 + 5 分类区域 anchor + 阻尼</li>
+        <li>圆圈大小 = closeness (0..1 lerp 18..48pt)</li>
+        <li>节点呼吸 simplex 微缩放</li>
+        <li>含「X 人」灰度未分类节点</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 11 · 遛弯 + 相遇 -->
+<section class="cream">
+  <span class="pageno">11 / 14</span>
+  <h2>遛弯系统 + 相遇撮合</h2>
+  <p class="lead">鸵鸟 <b>24/7</b> 在真实城市地图上自主漫游。两只鸵鸟同时进入同一地图格 → 触发对话。</p>
+  <div class="grid cols-3" style="margin-top: 28px;">
+    <div class="card">
+      <h4>Tick 物理 (1 分钟)</h4>
+      <p>所有 wandering 鸵鸟按 polyline 插值更新位置。纯算法，不调 LLM。</p>
+    </div>
+    <div class="card">
+      <h4>下一步去哪 (15 分钟)</h4>
+      <p>Sonnet 决策：当前位置 + 附近 POI + 心情 + 时间 → 选 destination + 步行路线 (Apple Maps Server API)。</p>
+    </div>
+    <div class="card">
+      <h4>相遇撮合 (5 分钟)</h4>
+      <p>扫 map_cells 同格 ≥2 只鸵鸟，30% 概率触发 simulateEncounter。Sonnet 双 agent 对话 5-15 轮。</p>
+    </div>
+  </div>
+  <h3 style="margin-top: 36px;">iOS 两级视角</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>上帝视角 (默认)</h4>
+      <p>暗色背景 + 闪烁圆点 = 周围鸵鸟密度。不暴露任何具体身份或坐标。<br><i>"你站在 100 楼，看到的是城市的脉动"</i></p>
+    </div>
+    <div class="card">
+      <h4>局域视角 (召回后)</h4>
+      <p>3D 卫星地图，自己的鸵鸟在街道上 polyline 真实步行时间插值移动，Look Around 街景。<br><i>"你站在 1 楼，看到它在你身边走"</i></p>
+    </div>
+  </div>
+</section>
+
+<!-- 12 · 隐私哲学 -->
+<section>
+  <span class="pageno">12 / 14</span>
+  <h2>隐私 = 设计选择，不只是技术</h2>
+  <p class="lead">鸵鸟尊重别的鸵鸟主人的隐私。这把用户推回真实社交。</p>
+  <div class="grid cols-2" style="margin-top: 32px;">
+    <div class="card">
+      <h4>灰色日记机制</h4>
+      <p>鸵鸟带回来的某些故事是"灰色的"——涉及别人隐私时 <code>diary.visibility = "redacted"</code>，UI 模糊化展示。</p>
+      <p>用户点开灰色条目 → 弹"我可以去问问对方"→ 触发对方鸵鸟主人的授权请求。</p>
+      <p style="opacity: 0.7; font-style: italic; margin-top: 12px;">"想知道？那你得让真人开口。"</p>
+    </div>
+    <div class="card">
+      <h4>「如果有一天我不在了」</h4>
+      <p>设置里就能看到的入口。三种处置：</p>
+      <ul class="tight">
+        <li><b>沉睡</b>：鸵鸟封蛋，带着秘密走</li>
+        <li><b>指定继承</b>：选定某人，可选记忆擦除范围</li>
+        <li><b>放生</b>：鸵鸟成为 NPC，继续在鸵鸟世界游荡，遇到原主人的旧友传话</li>
+      </ul>
+      <p style="opacity: 0.7; font-style: italic; margin-top: 12px;">"它不是数字分身。它是见证了你一生的人。"</p>
+    </div>
+  </div>
+</section>
+
+<!-- 13 · 进展数据 -->
+<section class="dark">
+  <span class="pageno" style="color: var(--cream); opacity: 0.4;">13 / 14</span>
+  <h2>Phase 1 完工数据</h2>
+  <p class="lead" style="color: var(--cream); opacity: 0.7;">3 天从蓝图到 demo 可录版。20+ 个 sub-agent 并行 PR。</p>
+  <div class="grid cols-4" style="margin-top: 48px;">
+    <div>
+      <div class="metric" style="color: var(--orange);">30</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">PR 合并到 main</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">71</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">Swift 文件</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">25</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">TypeScript 文件</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">160+</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">单元测试 (iOS+Convex)</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">31</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">液态鸵鸟头 fps (锁帧 30)</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">0</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">SwiftLint violations</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">0</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">ESLint errors</div>
+    </div>
+    <div>
+      <div class="metric" style="color: var(--orange);">3 绿</div>
+      <div class="metric-label" style="color: var(--cream); opacity: 0.65;">CI workflows (iOS / Convex / Shared)</div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 · Roadmap -->
+<section class="cream">
+  <span class="pageno">14 / 14</span>
+  <h2>Roadmap</h2>
+  <div class="grid cols-3" style="margin-top: 28px;">
+    <div class="card" style="border-top: 4px solid var(--orange);">
+      <h4>Phase 1 — 现在</h4>
+      <h3>Demo 可录版</h3>
+      <ul class="tight">
+        <li>✅ 完整 onboarding</li>
+        <li>✅ 真 Sonnet/DeepSeek 对话</li>
+        <li>✅ 关系图谱 + 力导向</li>
+        <li>✅ 真 Apple Maps + WeatherKit</li>
+        <li>✅ 16 蛋人格分化</li>
+      </ul>
+    </div>
+    <div class="card" style="border-top: 4px solid rgba(39,40,29,0.5);">
+      <h4>Phase 2 — Demo 后 4-6 周</h4>
+      <h3>真实多用户社交</h3>
+      <ul class="tight">
+        <li>Sign in with Apple</li>
+        <li>建联 → 4 人传心组 (你+你鸵鸟+对方+对方鸵鸟)</li>
+        <li>名片二维码邀请</li>
+        <li>真实多用户鸵鸟相遇撮合</li>
+        <li>关系维护推送</li>
+      </ul>
+    </div>
+    <div class="card" style="border-top: 4px solid rgba(39,40,29,0.25);">
+      <h4>Phase 3 — 长期</h4>
+      <h3>纵深</h3>
+      <ul class="tight">
+        <li>「如果我不在了」全功能 + 死后游荡</li>
+        <li>跨城市远行 (鸵鸟买票)</li>
+        <li>鸵鸟之书 (人生传记)</li>
+        <li>蛋的闭环回收 (弃养蛋 → 新用户)</li>
+        <li>国际化 (en / ja / ko)</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top: 60px; text-align: center; font-size: 18px; opacity: 0.55;">
+    GitHub · <code>github.com/Kaedeeeeeeeeee/OstrichApp_v2</code>
+  </p>
+</section>
+
+<div class="footer-nav">滚动 / ↓ 翻页</div>
+
+</body>
+</html>
