@@ -1,6 +1,10 @@
 // AppEnvironment.swift
 // 提供 Convex base URL。
-// - Debug: 优先读 Info.plist `ConvexURL`；缺省回落 http://localhost:3210（Convex dev 端口）。
+// - Debug: 优先读 Info.plist `ConvexURL`；缺省回落 http://localhost:3211。
+//   注意：本地 anonymous Convex 部署有两个端口
+//     - 3210 (CONVEX_URL):       function call 端点 (/api/run/<fn>)
+//     - 3211 (CONVEX_SITE_URL):  httpRouter 端点 (/api/awaken 等 REST)
+//   iOS ConvexClient 调的是 REST routes，所以必须用 3211。
 // - Release: hardcoded prod URL（占位 https://ostrich-prod.convex.cloud）。
 
 import Foundation
@@ -16,7 +20,7 @@ public struct AppEnvironment {
            let url = URL(string: raw),
            !raw.isEmpty {
             self.convexURL = url
-        } else if let fallback = URL(string: "http://localhost:3210") {
+        } else if let fallback = URL(string: "http://localhost:3211") {
             self.convexURL = fallback
         } else {
             preconditionFailure("Failed to construct fallback Convex URL")
