@@ -1,12 +1,14 @@
 // MainTabView.swift
 // 5 tab 主结构（BLUEPRINT §13.3）。
-// 4 个 placeholder 等 WS-F / WS-G / WS-H / WS-I 接入。
+// WS-F-1 接入 tab 2 (传心) + tab 5 (设置)。tab 3/4 留给 WS-F-2/WS-F-3。
 
 import SwiftUI
 
 struct MainTabView: View {
 
     @EnvironmentObject private var deps: AppDependency
+    @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
+    @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
 
     init() {
         // 给 TabBar 设浅奶油色底，避免默认半透明灰。
@@ -24,17 +26,14 @@ struct MainTabView: View {
                     Label("鸵鸟今日", systemImage: "house.fill")
                 }
 
-            PlaceholderView(
-                title: "传心",
-                subtitle: "ChatView · 等 WS-F"
-            )
-            .tabItem {
-                Label("传心", systemImage: "bubble.left.fill")
-            }
+            chatTab
+                .tabItem {
+                    Label("传心", systemImage: "bubble.left.fill")
+                }
 
             PlaceholderView(
                 title: "关系图谱",
-                subtitle: "GraphView · 等 WS-G"
+                subtitle: "GraphView · 等 WS-F-2"
             )
             .tabItem {
                 Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
@@ -45,15 +44,31 @@ struct MainTabView: View {
                     Label("遛弯", systemImage: "figure.walk")
                 }
 
-            PlaceholderView(
-                title: "设置",
-                subtitle: "SettingsView · 等 WS-I"
-            )
-            .tabItem {
-                Label("设置", systemImage: "gearshape.fill")
-            }
+            SettingsView()
+                .tabItem {
+                    Label("设置", systemImage: "gearshape.fill")
+                }
         }
         .tint(OstrichColors.orange)
+    }
+
+    // MARK: - Chat tab
+
+    /// roomId 为空（onboarding 还没存）时退化为占位提示。
+    @ViewBuilder
+    private var chatTab: some View {
+        if mainOstrichId.isEmpty {
+            PlaceholderView(
+                title: "传心",
+                subtitle: "先完成 onboarding，鸵鸟才能听见你"
+            )
+        } else {
+            ChatView(
+                client: deps.client,
+                roomId: mainOstrichId,
+                ostrichName: mainOstrichName.isEmpty ? "鸵鸟" : mainOstrichName
+            )
+        }
     }
 }
 
