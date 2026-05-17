@@ -1,97 +1,74 @@
 // MainTabView.swift
-// 5 tab 主结构（BLUEPRINT §13.3）。
-// WS-F-1 接入 tab 2 (传心) + tab 5 (设置)。tab 3/4 留给 WS-F-2/WS-F-3。
+// 应用主导航容器。
+//
+// 设计变更：去掉底部 TabBar —— Home 既然能放四个入口卡片 + 传心按钮，
+// 五个 tab 就是冗余。Settings 太单薄不值得占一个 tab，移到 Home 右上角齿轮。
+//
+// 现在结构：
+//   NavigationStack { HomeView }
+//   HomeView 内部用 NavigationLink(value: HomeRoute) push 到子视图。
+//
+// 见 BLUEPRINT §13.3（虽然蓝图原本写的 5-tab 结构，根据 demo 真跑反馈调整）。
 
 import SwiftUI
 
-struct MainTabView: View {
+/// Home 出发的 4 + 1 个导航目的地。
+public enum HomeRoute: Hashable {
+    case chat
+    case diary
+    case graph
+    case wander
+    case settings
+}
 
+struct MainTabView: View {
     @EnvironmentObject private var deps: AppDependency
     @AppStorage("mainOstrichId") private var mainOstrichId: String = ""
     @AppStorage("mainOstrichName") private var mainOstrichName: String = "鸵鸟"
     /// 主传心室 id（chat_rooms 表）。Step9 onboarding 完写入。
     @AppStorage("mainRoomId") private var mainRoomId: String = ""
 
-    init() {
-        // 给 TabBar 设浅奶油色底，避免默认半透明灰。
-        let appearance = UITabBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(OstrichColors.cream)
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
-    }
-
     var body: some View {
-        TabView {
+        NavigationStack {
             HomeView()
-                .tabItem {
-                    Label("鸵鸟今日", systemImage: "house.fill")
-                }
-
-            chatTab
-                .tabItem {
-                    Label("传心", systemImage: "bubble.left.fill")
-                }
-
-            GraphView(client: deps.client)
-                .tabItem {
-                    Label("图谱", systemImage: "point.3.connected.trianglepath.dotted")
-                }
-
-            WanderView(client: deps.client)
-                .tabItem {
-                    Label("遛弯", systemImage: "figure.walk")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label("设置", systemImage: "gearshape.fill")
+                .navigationDestination(for: HomeRoute.self) { route in
+                    destination(for: route)
+                        .navigationBarTitleDisplayMode(.inline)
                 }
         }
         .tint(OstrichColors.orange)
     }
 
-    // MARK: - Chat tab
-
-    /// roomId 为空（onboarding 还没存）时退化为占位提示。
-    /// 注意：传给 ChatView 的是 chat_rooms.id，不是 ostriches.id。
-    /// 老用户可能 @AppStorage 里只有 mainOstrichId（来自 #31 旧版），
-    /// 缺 mainRoomId 时也走占位 — 实际 demo 时新装的 app 已经会写两个。
     @ViewBuilder
-    private var chatTab: some View {
+    private func destination(for route: HomeRoute) -> some View {
+        switch route {
+        case .chat: chatDestination
+        case .diary: DiaryView(client: deps.client)
+        case .graph: GraphView(client: deps.client)
+        case .wander: WanderView(client: deps.client)
+        case .settings: SettingsView()
+        }
+    }
+
+    /// 传心目的地：roomId 为空（onboarding 未完成或老用户没 mainRoomId）时占位。
+    @ViewBuilder
+    private var chatDestination: some View {
         if mainRoomId.isEmpty {
-            PlaceholderView(
-                title: "传心",
-                subtitle: "先完成 onboarding，鸵鸟才能听见你"
-            )
+            VStack(spacing: OstrichSpacing.l) {
+                LiquidOstrichHeadView(size: 160)
+                    .frame(width: 200, height: 200)
+                Text("先完成 onboarding，鸵鸟才能听见你")
+                    .font(OstrichTypography.callout)
+                    .foregroundStyle(OstrichColors.ink.opacity(0.5))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(OstrichColors.bodyBackground)
         } else {
             ChatView(
                 client: deps.client,
                 roomId: mainRoomId,
                 ostrichName: mainOstrichName.isEmpty ? "鸵鸟" : mainOstrichName
             )
-        }
-    }
-}
-
-/// 占位视图：液态鸵鸟小图 + 标题 + 副标，作为非 Home tab 在 demo 阶段的展位。
-private struct PlaceholderView: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        ZStack {
-            OstrichColors.bodyBackground.ignoresSafeArea()
-            VStack(spacing: OstrichSpacing.l) {
-                LiquidOstrichHeadView(size: 160)
-                    .frame(width: 200, height: 200)
-                Text(title)
-                    .font(OstrichTypography.title)
-                    .foregroundStyle(OstrichColors.ink)
-                Text(subtitle)
-                    .font(OstrichTypography.callout)
-                    .foregroundStyle(OstrichColors.ink.opacity(0.5))
-            }
         }
     }
 }
