@@ -102,16 +102,26 @@ async function getAs<
 }
 
 // ─────────────────────────────────────────────────────────────
-// mock @anthropic-ai/sdk
-// 通过 mockCreate 闭包变量切换不同响应（普通文本 / 包含 tool_use）
+// mock @anthropic-ai/sdk + openai
+// 通过 mockCreate / mockOpenAICreate 闭包变量切换不同响应。
 // ─────────────────────────────────────────────────────────────
 
 const mockCreate = vi.fn();
+const mockOpenAICreate = vi.fn();
 
 vi.mock("@anthropic-ai/sdk", () => {
   return {
     default: class Anthropic {
       messages = { create: mockCreate };
+      constructor(_opts?: unknown) {}
+    },
+  };
+});
+
+vi.mock("openai", () => {
+  return {
+    default: class OpenAI {
+      chat = { completions: { create: mockOpenAICreate } };
       constructor(_opts?: unknown) {}
     },
   };
@@ -127,7 +137,10 @@ function makeT() {
 
 afterEach(() => {
   mockCreate.mockReset();
+  mockOpenAICreate.mockReset();
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.LLM_PROVIDER;
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -310,6 +323,134 @@ describe("sendMessage", () => {
       const ostrichMessage = messages[messages.length - 1];
       expect(ostrichMessage.metadata.toolCalls?.[0].toolName).toBe("note_person");
       expect(ostrichMessage.metadata.toolCalls?.[0].pendingPersonId).toBe(pending[0]._id);
+    });
+  });
+
+  it("LLM_PROVIDER=deepseek · happy path 走 OpenAI SDK + DeepSeek baseURL", async () => {
+    process.env.LLM_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "sk-deepseek-test";
+
+    mockOpenAICreate.mockResolvedValueOnce({
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "嗯。DeepSeek 路径活着。",
+            tool_calls: [],
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 80, completion_tokens: 20, total_tokens: 100 },
+    });
+
+    const t = makeT();
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+      userName: "诗枫",
+    })) as AwakenResult;
+
+    const result = (await t.action(makeFunctionReference<"action">("chat:sendMessage"), {
+      roomId: awaken.mainRoomId,
+      content: "你听得到吗？",
+    })) as SendResult;
+
+    expect(result.ostrichReply.content).toBe("嗯。DeepSeek 路径活着。");
+    expect(result.toolCalls).toEqual([]);
+
+    // Anthropic mock 完全不应被调用
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockOpenAICreate).toHaveBeenCalledTimes(1);
+
+    const callArgs = mockOpenAICreate.mock.calls[0][0];
+    expect(callArgs.model).toBe("deepseek-chat");
+    // OpenAI 协议：system 作为 messages[0]
+    expect(callArgs.messages[0]).toEqual(expect.objectContaining({ role: "system" }));
+    expect(callArgs.messages.at(-1)).toEqual({
+      role: "user",
+      content: "你听得到吗？",
+    });
+    // tools 是 OpenAI function-calling 格式
+    expect(Array.isArray(callArgs.tools)).toBe(true);
+    expect(callArgs.tools[0]).toEqual(
+      expect.objectContaining({
+        type: "function",
+        function: expect.objectContaining({
+          name: expect.any(String),
+          parameters: expect.any(Object),
+        }),
+      }),
+    );
+  });
+
+  it("LLM_PROVIDER=deepseek · tool_calls 转 OpenAI 协议后能解析回内部统一格式", async () => {
+    process.env.LLM_PROVIDER = "deepseek";
+    process.env.DEEPSEEK_API_KEY = "sk-deepseek-test";
+
+    mockOpenAICreate.mockResolvedValueOnce({
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "你妈妈。我想把她记下来。",
+            tool_calls: [
+              {
+                id: "call_1",
+                type: "function",
+                function: {
+                  name: "note_person",
+                  arguments: JSON.stringify({
+                    name: "妈妈",
+                    hint: "用户提到母亲让他窒息",
+                    suggestedCategory: "family",
+                    emotionalContext: "矛盾",
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 200, completion_tokens: 50, total_tokens: 250 },
+    });
+
+    const t = makeT();
+    const awaken = (await t.mutation(makeFunctionReference<"mutation">("ostriches:awakenOstrich"), {
+      eggType: 1,
+      name: "柱子",
+      userMbti: "INFP",
+      userZodiac: "巨蟹座",
+      userName: "诗枫",
+    })) as AwakenResult;
+
+    const result = (await t.action(makeFunctionReference<"action">("chat:sendMessage"), {
+      roomId: awaken.mainRoomId,
+      content: "我妈又开始了……",
+    })) as SendResult;
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].toolName).toBe("note_person");
+    expect(result.toolCalls[0].args).toEqual({
+      name: "妈妈",
+      hint: "用户提到母亲让他窒息",
+      suggestedCategory: "family",
+      emotionalContext: "矛盾",
+    });
+
+    await t.run(async (ctx) => {
+      const pending = await ctx.db
+        .query("pending_persons")
+        .withIndex("by_owner", (q) => q.eq("ownerId", awaken.ownerId))
+        .collect();
+      expect(pending.length).toBe(1);
+      expect(pending[0].name).toBe("妈妈");
+      expect(pending[0].categoryHint).toBe("family");
     });
   });
 
