@@ -27,7 +27,7 @@ concurrency:
 jobs:
   typecheck-and-test:
     name: Typecheck + Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","ubuntu-zhang","ci-ubuntu-24"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 10
 
     steps:
@@ -42,7 +42,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
+          cache: '${{ runner.environment == ''github-hosted'' && ''pnpm'' || '''' }}'
 
       - name: Install deps
         run: pnpm install --frozen-lockfile

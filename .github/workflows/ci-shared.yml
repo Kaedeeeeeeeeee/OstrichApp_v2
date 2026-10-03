@@ -12,7 +12,7 @@ concurrency:
 jobs:
   validate:
     name: Validate shared assets
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(((github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","x64","ubuntu-zhang","ci-ubuntu-24"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
 
     steps:
